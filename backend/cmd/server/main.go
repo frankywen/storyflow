@@ -16,6 +16,7 @@ import (
 	"storyflow/internal/service"
 	"storyflow/pkg/crypto"
 	"storyflow/pkg/database"
+	"storyflow/pkg/tts"
 )
 
 func main() {
@@ -57,6 +58,13 @@ func main() {
 		&model.Scene{},
 		&model.Image{},
 		&model.GenerationJob{},
+		// Audio models
+		&model.CharacterVoice{},
+		&model.AudioFile{},
+		&model.Subtitle{},
+		&model.AudioGenerationTask{},
+		&model.VideoSynthesisTask{},
+		&model.VoiceMapping{},
 	); err != nil {
 		log.Fatal("Failed to auto migrate:", err)
 	}
@@ -67,6 +75,7 @@ func main() {
 	userConfigRepo := repository.NewUserConfigRepository(db)
 	tokenRepo := repository.NewRefreshTokenRepository(db)
 	resetTokenRepo := repository.NewPasswordResetTokenRepository(db)
+	audioRepo := repository.NewAudioRepository(db)
 
 	// Seed initial admin user if no admin exists
 	seedAdminUser(userRepo)
@@ -87,6 +96,25 @@ func main() {
 	emailService := service.NewEmailService(userRepo)
 	rateLimitService := service.NewRateLimitService(60, time.Minute)
 
+	// Initialize TTS provider
+	ttsProvider := tts.NewEdgeTTSProvider(tts.EdgeTTSConfig{
+		OutputDir:    getEnv("TTS_OUTPUT_DIR", "./uploads/audio"),
+		AudioBaseURL: getEnv("AUDIO_BASE_URL", "http://localhost:8080/uploads/audio"),
+		Timeout:      60 * time.Second,
+	})
+
+	// Initialize audio service
+	audioService := service.NewAudioService(
+		audioRepo,
+		storyRepo,
+		ttsProvider,
+		getEnv("TTS_OUTPUT_DIR", "./uploads/audio"),
+		getEnv("AUDIO_BASE_URL", "http://localhost:8080/uploads/audio"),
+	)
+
+	// Initialize subtitle service
+	subtitleService := service.NewSubtitleService(audioRepo, getEnv("SUBTITLE_DIR", "./uploads/subtitles"))
+
 	// Setup router
 	r := router.SetupRouter(
 		jwtService,
@@ -98,6 +126,8 @@ func main() {
 		userRepo,
 		userConfigRepo,
 		rateLimitService,
+		audioService,
+		subtitleService,
 	)
 
 	// Start server
