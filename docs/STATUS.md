@@ -1,12 +1,39 @@
 # StoryFlow 开发进度
 
-> 最后更新: 2026-03-28
+> 最后更新: 2026-03-29
 
-## 当前版本: v0.2.2
+## 当前版本: v0.3.0
 
-### 已完成功能
+### v0.3 新增功能 ✅
 
-#### 核心功能
+#### 用户系统增强
+- [x] JWT 认证（Access Token + Refresh Token）
+- [x] 邮箱验证码登录
+- [x] 密码重置功能
+- [x] Token 黑名单机制
+- [x] 多用户数据隔离
+- [x] 管理员后台
+
+#### 配音/字幕系统
+- [x] TTS Provider 接口（Edge-TTS 实现）
+- [x] 异步配音生成任务
+- [x] 并发场景处理
+- [x] 进度追踪
+- [x] 字幕生成（SRT 格式）
+- [x] 视频合成（配音+字幕+视频）
+
+#### 前端增强
+- [x] 登录/注册页面
+- [x] 密码找回页面
+- [x] 用户配置页面
+- [x] 管理后台页面
+- [x] 配音配置页面
+
+---
+
+## 已完成功能
+
+### 核心功能
 - [x] 故事创建和管理
 - [x] AI 故事解析（阿里云 qwen3.5-plus）
 - [x] 角色提取和场景分镜
@@ -14,146 +41,151 @@
 - [x] 图片批量生成（火山引擎 doubao-seedream）
 - [x] 图片拼接导出（PNG/PDF）
 
-#### 角色一致性模块 (v0.2.0)
+### 角色一致性模块 (v0.2.0)
 - [x] 角色参考图生成
 - [x] 批量生成角色参考图
 - [x] 用户上传/替换参考图
 - [x] 场景图片生成时使用角色一致性
 - [x] Prompt 增强 + Seed 锁定策略
-- [x] 场景-角色关联存储
 
-#### 视频生成模块 (v0.2.1-v0.2.2)
+### 视频生成模块 (v0.2.1-v0.2.2)
 - [x] 火山引擎视频生成（图生视频）
 - [x] 视频断点续传（跳过已完成场景）
 - [x] 视频自动合成（ffmpeg）
 - [x] 合成视频持久化存储
 
-### 视频生成支持
+---
+
+## API 端点
+
+### 认证相关
+```
+POST /api/v1/auth/register           # 注册
+POST /api/v1/auth/login              # 登录
+POST /api/v1/auth/logout             # 登出
+POST /api/v1/auth/refresh            # 刷新Token
+POST /api/v1/auth/send-code          # 发送验证码
+POST /api/v1/auth/verify-code        # 验证验证码
+POST /api/v1/auth/forgot-password    # 忘记密码
+POST /api/v1/auth/reset-password     # 重置密码
+GET  /api/v1/auth/me                 # 获取当前用户
+```
+
+### 用户配置
+```
+GET  /api/v1/user/config             # 获取配置
+PUT  /api/v1/user/config             # 更新配置
+PUT  /api/v1/user/config/llm         # 更新LLM配置
+PUT  /api/v1/user/config/image       # 更新图片配置
+PUT  /api/v1/user/config/video       # 更新视频配置
+```
+
+### 故事管理
+```
+POST /api/v1/stories                 # 创建故事
+GET  /api/v1/stories                 # 故事列表
+GET  /api/v1/stories/:id             # 获取故事详情
+PUT  /api/v1/stories/:id             # 更新故事
+DELETE /api/v1/stories/:id           # 删除故事
+POST /api/v1/stories/:id/restore     # 恢复故事
+POST /api/v1/stories/:id/parse       # AI解析故事
+POST /api/v1/stories/:id/generate-references  # 批量生成角色参考图
+```
+
+### 音频/字幕
+```
+POST /api/v1/audio/generate          # 生成配音
+GET  /api/v1/audio/status/:task_id   # 配音任务状态
+GET  /api/v1/audio/story/:story_id   # 获取音频列表
+POST /api/v1/audio/subtitles/:story_id  # 生成字幕
+GET  /api/v1/audio/subtitles/:story_id  # 获取字幕
+POST /api/v1/audio/synthesis         # 合成视频
+```
+
+### 视频
+```
+POST /api/v1/videos/generate         # 单场景视频生成
+POST /api/v1/videos/batch            # 批量视频生成
+GET  /api/v1/videos/status/:task_id  # 视频任务状态
+POST /api/v1/videos/merge            # 合成完整视频
+GET  /api/v1/videos/synthesis/:task_id  # 视频合成状态
+```
+
+### 角色管理
+```
+POST /api/v1/characters/:id/reference     # 上传参考图
+DELETE /api/v1/characters/:id/reference   # 删除参考图
+POST /api/v1/characters/:id/regenerate    # 重新生成参考图
+```
+
+### 导出
+```
+POST /api/v1/export                  # 导出 PNG/PDF
+```
+
+### 管理后台
+```
+GET  /api/v1/admin/stats             # 系统统计
+GET  /api/v1/admin/users             # 用户列表
+GET  /api/v1/admin/users/:id         # 用户详情
+PUT  /api/v1/admin/users/:id         # 更新用户
+POST /api/v1/admin/users/:id/suspend # 暂停用户
+POST /api/v1/admin/users/:id/activate # 激活用户
+DELETE /api/v1/admin/users/:id       # 删除用户
+```
+
+---
+
+## 视频生成支持
 
 | Provider | 状态 | 说明 |
 |----------|------|------|
 | Kling (可灵) | ✅ 已实现 | 快手 AI 视频生成 |
 | Runway Gen-3 | ✅ 已实现 | Runway 视频生成 |
-| Volcengine (豆包) | ✅ 已验证 | 图生视频，API端点已确认 |
+| Volcengine (豆包) | ✅ 已验证 | 图生视频 |
 | Mock | ✅ 已实现 | 测试用 |
 
-### 测试状态
+## TTS 支持场景
 
-| 功能 | 状态 | 备注 |
-|------|------|------|
-| 创建故事 | ✅ | API 正常 |
-| AI解析 | ✅ | 阿里云 LLM |
-| 角色参考图 | ✅ | 火山引擎 2048x2048 |
-| 场景-角色关联 | ✅ | 已修复存储问题 |
-| 场景图片 | ✅ | 批量生成正常 |
-| 场景排序 | ✅ | 已修复顺序问题 |
-| 任务状态 | ✅ | 已修复更新问题 |
-| 导出 PNG | ✅ | 正常 |
-| 导出 PDF | 待测试 | - |
-| 视频生成 | ✅ | 火山引擎图生视频已验证 |
-| 视频断点续传 | ✅ | 跳过已完成场景 |
-| 视频合成 | ✅ | ffmpeg 合并成功 |
-| 合成视频持久化 | ✅ | 刷新后仍可查看 |
+| Provider | 状态 | 说明 |
+|----------|------|------|
+| Edge-TTS | ✅ 已实现 | 免费，微软在线TTS |
+| Mock | ✅ 已实现 | 测试用 |
 
-### 本次修复
+---
 
-| 问题 | 解决方案 |
-|------|----------|
-| 火山引擎图片尺寸限制 | 改用 2048x2048 |
-| 任务状态未更新 | 重载 job 后更新 |
-| 场景-角色关联未存储 | 使用 pq.StringArray 类型 |
-| 场景顺序错误 | Preload 添加 ORDER BY |
-
-### 视频生成配置说明
+## 环境变量配置
 
 ```env
-# Kling (推荐)
-VIDEO_PROVIDER=kling
-VIDEO_API_KEY=your-kling-api-key
+# 数据库
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=password
+DB_NAME=storyflow
 
-# Runway
-VIDEO_PROVIDER=runway
-VIDEO_API_KEY=your-runway-api-key
+# JWT
+JWT_ACCESS_SECRET=your-access-secret
+JWT_REFRESH_SECRET=your-refresh-secret
 
-# 火山引擎 (待验证)
-VIDEO_PROVIDER=volcengine
-VIDEO_API_KEY=your-volcengine-api-key
-VIDEO_MODEL=doubao-seedance-1-0-i2v-250428
+# TTS 配置
+TTS_OUTPUT_DIR=./uploads/audio
+AUDIO_BASE_URL=http://localhost:8080/uploads/audio
+
+# 字幕配置
+SUBTITLE_DIR=./uploads/subtitles
+
+# 视频合成配置
+SYNTHESIS_OUTPUT_DIR=./uploads/synthesis
+SYNTHESIS_BASE_URL=http://localhost:8080/uploads/synthesis
+
+# 服务端口
+PORT=8080
 ```
 
-### 火山引擎视频生成 API 验证 (v0.2.1)
+---
 
-**API 端点：**
-- 创建任务: `POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks`
-- 查询状态: `GET https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/{task_id}`
-
-**请求格式：**
-```json
-{
-  "model": "doubao-seedance-1-0-pro-250528",
-  "content": [
-    {
-      "type": "image_url",
-      "image_url": {"url": "https://your-image-url.jpg"}
-    }
-  ]
-}
-```
-
-**响应格式：**
-```json
-{
-  "id": "cgt-20260327161505-fch79",
-  "status": "succeeded",
-  "content": {"video_url": "https://..."},
-  "resolution": "1080p",
-  "duration": 5,
-  "framespersecond": 24
-}
-```
-
-**测试结果：** ✅ 成功生成 5秒 1080p 视频
-
-**API 端到端测试：**
-```bash
-# 生成视频
-POST /api/v1/videos/generate
-Response: {"task_id": "cgt-xxx", "status": "pending"}
-
-# 查询状态 (约10秒后完成)
-GET /api/v1/videos/status/cgt-xxx
-Response: {"status": "completed", "video_url": "https://...", "progress": 100}
-```
-
-### 待处理事项
-
-- [ ] 用户申请 Kling API Key
-- [ ] 角色一致性外观优化（用户反馈"外观有些不一样"）
-
-### API 端点
-
-```
-POST /api/v1/stories                    # 创建故事
-GET  /api/v1/stories/:id                # 获取故事详情
-POST /api/v1/stories/:id/parse          # AI解析故事
-POST /api/v1/stories/:id/generate-references  # 批量生成角色参考图
-
-POST /api/v1/images/batch               # 批量生成场景图片
-GET  /api/v1/images/jobs/:id            # 查询生成任务状态
-
-POST /api/v1/characters/:id/regenerate  # 重新生成参考图
-POST /api/v1/characters/:id/reference   # 上传参考图
-
-POST /api/v1/videos/generate            # 单场景视频生成
-POST /api/v1/videos/batch               # 批量视频生成（支持断点续传）
-GET  /api/v1/videos/status/:task_id     # 查询视频任务状态
-POST /api/v1/videos/merge               # 合成完整视频
-GET  /api/v1/videos/view?file=xxx.mp4   # 查看合成视频
-
-POST /api/v1/export                     # 导出 PNG/PDF
-```
-
-### 技术栈
+## 技术栈
 
 | 组件 | 技术 |
 |------|------|
@@ -162,17 +194,38 @@ POST /api/v1/export                     # 导出 PNG/PDF
 | 数据库 | PostgreSQL 15 |
 | LLM | 阿里云 qwen3.5-plus |
 | 图片生成 | 火山引擎 doubao-seedream |
+| TTS | Edge-TTS (免费) |
+| 视频合成 | ffmpeg |
 
-### 部署信息
+---
+
+## 部署信息
 
 ```bash
-# 启动服务
-cd backend && ./server
+# 启动后端
+cd backend && go run cmd/server/main.go
 
 # 启动前端
 cd frontend && npm run dev
 
 # 访问地址
 后端: http://localhost:8080
-前端: http://localhost:3001
+前端: http://localhost:5173
 ```
+
+---
+
+## 使用流程
+
+```
+1. 输入故事 → 2. AI解析 → 3. 生成图片 → 4. 配音字幕 → 5. 视频生成 → 6. 导出
+```
+
+---
+
+## 待处理事项
+
+- [ ] 角色一致性外观优化
+- [ ] 更多 TTS Provider 支持（火山引擎、阿里云等）
+- [ ] 视频配音时长同步优化
+- [ ] 字幕样式自定义
