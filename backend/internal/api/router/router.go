@@ -53,7 +53,7 @@ func SetupRouter(
 	videoHandler := handler.NewVideoHandler(repo, aiFactory)
 	characterHandler := handler.NewCharacterHandler(repo, aiFactory)
 	adminHandler := handler.NewAdminHandler(userRepo, userConfigRepo, repo)
-	audioHandler := handler.NewAudioHandler(audioService, subtitleService)
+	audioHandler := handler.NewAudioHandler(audioService, subtitleService, repo)
 
 	// API routes
 	api := r.Group("/api/v1")

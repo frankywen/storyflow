@@ -6,32 +6,50 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"storyflow/internal/repository"
 	"storyflow/internal/service"
 )
 
 type AudioHandler struct {
 	audioService    *service.AudioService
 	subtitleService *service.SubtitleService
+	storyRepo       *repository.StoryRepository
 }
 
-func NewAudioHandler(audioService *service.AudioService, subtitleService *service.SubtitleService) *AudioHandler {
+func NewAudioHandler(audioService *service.AudioService, subtitleService *service.SubtitleService, storyRepo *repository.StoryRepository) *AudioHandler {
 	return &AudioHandler{
 		audioService:    audioService,
 		subtitleService: subtitleService,
+		storyRepo:       storyRepo,
 	}
+}
+
+// verifyStoryOwnership verifies the user owns the story
+func (h *AudioHandler) verifyStoryOwnership(c *gin.Context, storyID uuid.UUID) bool {
+	userID := c.MustGet("user_id").(uuid.UUID)
+	_, err := h.storyRepo.GetWithRelationsForUser(c.Request.Context(), userID, storyID)
+	return err == nil
 }
 
 // GenerateAudio handles POST /api/v1/audio/generate
 func (h *AudioHandler) GenerateAudio(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	var req service.GenerateAudioRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	// Verify user owns the story
+	if _, err := h.storyRepo.GetWithRelationsForUser(c.Request.Context(), userID, req.StoryID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
+		return
+	}
+
 	task, err := h.audioService.GenerateAudio(c.Request.Context(), req)
 	if err != nil {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -72,7 +90,13 @@ func (h *AudioHandler) GetAudios(c *gin.Context) {
 	storyIDStr := c.Param("story_id")
 	storyID, err := uuid.Parse(storyIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story_id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story ID"})
+		return
+	}
+
+	// Verify user owns the story
+	if !h.verifyStoryOwnership(c, storyID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
 		return
 	}
 
@@ -90,7 +114,13 @@ func (h *AudioHandler) GenerateSubtitles(c *gin.Context) {
 	storyIDStr := c.Param("story_id")
 	storyID, err := uuid.Parse(storyIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story_id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story ID"})
+		return
+	}
+
+	// Verify user owns the story
+	if !h.verifyStoryOwnership(c, storyID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
 		return
 	}
 
@@ -110,7 +140,13 @@ func (h *AudioHandler) GetSubtitles(c *gin.Context) {
 	storyIDStr := c.Param("story_id")
 	storyID, err := uuid.Parse(storyIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story_id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story ID"})
+		return
+	}
+
+	// Verify user owns the story
+	if !h.verifyStoryOwnership(c, storyID) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
 		return
 	}
 
