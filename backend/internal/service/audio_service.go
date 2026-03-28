@@ -94,6 +94,7 @@ func (s *AudioService) processAudioGeneration(ctx context.Context, task *model.A
 	semaphore := make(chan struct{}, s.maxConcurrent)
 	var failedScenes []map[string]interface{}
 	var mu sync.Mutex
+	var completedScenes int32 // 使用 atomic 计数器避免竞争
 
 	for i, scene := range story.Scenes {
 		wg.Add(1)
@@ -111,8 +112,10 @@ func (s *AudioService) processAudioGeneration(ctx context.Context, task *model.A
 				mu.Unlock()
 			}
 
-			task.CompletedScenes = idx + 1
-			task.Progress = int(float64(task.CompletedScenes) / float64(task.TotalScenes) * 100)
+			// 使用 atomic 更新进度
+			completed := atomic.AddInt32(&completedScenes, 1)
+			task.CompletedScenes = int(completed)
+			task.Progress = int(float64(completed) / float64(task.TotalScenes) * 100)
 			s.audioRepo.UpdateTask(ctx, task)
 		}(i, scene)
 	}
@@ -145,7 +148,7 @@ func (s *AudioService) generateSceneAudio(ctx context.Context, storyID uuid.UUID
 			return fmt.Errorf("dialogue TTS failed: %w", err)
 		}
 
-		s.audioRepo.CreateAudio(ctx, &model.AudioFile{
+		if err := s.audioRepo.CreateAudio(ctx, &model.AudioFile{
 			StoryID:     storyID,
 			SceneID:     scene.ID,
 			AudioType:   "dialogue",
@@ -154,7 +157,9 @@ func (s *AudioService) generateSceneAudio(ctx context.Context, storyID uuid.UUID
 			Duration:    result.Duration,
 			VoiceID:     result.VoiceID,
 			Status:      "completed",
-		})
+		}); err != nil {
+			return fmt.Errorf("failed to save dialogue audio: %w", err)
+		}
 	}
 
 	// 生成旁白音频
@@ -164,7 +169,7 @@ func (s *AudioService) generateSceneAudio(ctx context.Context, storyID uuid.UUID
 			return fmt.Errorf("narration TTS failed: %w", err)
 		}
 
-		s.audioRepo.CreateAudio(ctx, &model.AudioFile{
+		if err := s.audioRepo.CreateAudio(ctx, &model.AudioFile{
 			StoryID:     storyID,
 			SceneID:     scene.ID,
 			AudioType:   "narration",
@@ -173,7 +178,9 @@ func (s *AudioService) generateSceneAudio(ctx context.Context, storyID uuid.UUID
 			Duration:    result.Duration,
 			VoiceID:     result.VoiceID,
 			Status:      "completed",
-		})
+		}); err != nil {
+			return fmt.Errorf("failed to save narration audio: %w", err)
+		}
 	}
 
 	return nil
