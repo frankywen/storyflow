@@ -29,6 +29,11 @@ func NewRateLimitService(limit int, window time.Duration) *RateLimitService {
 
 // Check checks if the request is within rate limit
 func (s *RateLimitService) Check(ctx context.Context, key string) bool {
+	// Lazy cleanup: occasionally clean up expired entries
+	if len(s.limits) > 1000 {
+		go s.Cleanup()
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

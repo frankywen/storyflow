@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"storyflow/internal/service"
 )
 
@@ -38,7 +39,13 @@ func RateLimitByUser(rateLimitService *service.RateLimitService) gin.HandlerFunc
 	return RateLimitMiddleware(rateLimitService, func(c *gin.Context) string {
 		userID, exists := c.Get("user_id")
 		if exists {
-			return "user:" + userID.(string)
+			if userIDStr, ok := userID.(string); ok {
+				return "user:" + userIDStr
+			}
+			// uuid.UUID type
+			if uid, ok := userID.(uuid.UUID); ok {
+				return "user:" + uid.String()
+			}
 		}
 		return "ip:" + c.ClientIP()
 	})
