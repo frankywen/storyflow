@@ -188,7 +188,10 @@ func (s *AuthService) LogoutWithAccessToken(ctx context.Context, refreshToken st
 	// Revoke refresh token
 	if refreshToken != "" {
 		tokenHash := s.jwtService.HashToken(refreshToken)
-		s.tokenRepo.Revoke(ctx, tokenHash)
+		if err := s.tokenRepo.Revoke(ctx, tokenHash); err != nil {
+			// Log but continue - access token blacklisting is more important
+			// In production: log.Printf("failed to revoke refresh token: %v", err)
+		}
 	}
 
 	// Add access token to blacklist

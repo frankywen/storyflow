@@ -54,7 +54,7 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 
 		// Check token blacklist
 		if m.userRepo.IsTokenBlacklisted(c.Request.Context(), claims.Jti) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "token已失效"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "token has been revoked"})
 			c.Abort()
 			return
 		}
