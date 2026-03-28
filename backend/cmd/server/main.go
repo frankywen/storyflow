@@ -25,7 +25,10 @@ func main() {
 	}
 
 	// Database configuration
-	dbPort, _ := strconv.Atoi(getEnv("DB_PORT", "5432"))
+	dbPort, err := strconv.Atoi(getEnv("DB_PORT", "5432"))
+	if err != nil {
+		log.Fatal("Invalid DB_PORT:", err)
+	}
 	dbCfg := database.Config{
 		Host:     getEnv("DB_HOST", "localhost"),
 		Port:     dbPort,
@@ -147,7 +150,7 @@ func seedAdminUser(userRepo *repository.UserRepository) {
 		return
 	}
 
-	log.Printf("Created initial admin user: %s (password: %s)", adminEmail, adminPassword)
+	log.Printf("Created initial admin user: %s", adminEmail)
 	log.Println("Please change the admin password immediately after first login!")
 }
 
