@@ -13,12 +13,16 @@ import (
 
 // AuthHandler handles authentication requests
 type AuthHandler struct {
-	authService *service.AuthService
+	authService  *service.AuthService
+	emailService *service.EmailService
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(authService *service.AuthService) *AuthHandler {
-	return &AuthHandler{authService: authService}
+func NewAuthHandler(authService *service.AuthService, emailService *service.EmailService) *AuthHandler {
+	return &AuthHandler{
+		authService:  authService,
+		emailService: emailService,
+	}
 }
 
 // Register handles POST /api/v1/auth/register
@@ -189,4 +193,57 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "password has been reset successfully"})
+}
+
+// SendVerificationCode handles POST /api/v1/auth/send-code
+func (h *AuthHandler) SendVerificationCode(c *gin.Context) {
+	var input struct {
+		Email    string `json:"email" binding:"required,email"`
+		CodeType string `json:"type" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate code_type
+	if input.CodeType != "register" && input.CodeType != "reset_password" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid code type"})
+		return
+	}
+
+	err := h.emailService.SendVerificationCode(c.Request.Context(), input.Email, input.CodeType)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "验证码已发送",
+	})
+}
+
+// VerifyCode handles POST /api/v1/auth/verify-code
+func (h *AuthHandler) VerifyCode(c *gin.Context) {
+	var input struct {
+		Email    string `json:"email" binding:"required,email"`
+		Code     string `json:"code" binding:"required"`
+		CodeType string `json:"type" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := h.emailService.VerifyCode(c.Request.Context(), input.Email, input.Code, input.CodeType)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "验证码验证成功",
+	})
 }

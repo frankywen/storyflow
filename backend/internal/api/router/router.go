@@ -14,6 +14,7 @@ import (
 func SetupRouter(
 	jwtService *auth.JWTService,
 	authService *service.AuthService,
+	emailService *service.EmailService,
 	aiFactory *service.AIServiceFactory,
 	encryptor *crypto.Encryptor,
 	repo *repository.StoryRepository,
@@ -42,7 +43,7 @@ func SetupRouter(
 	exportService := service.NewExportService(repo)
 
 	// Handlers
-	authHandler := handler.NewAuthHandler(authService)
+	authHandler := handler.NewAuthHandler(authService, emailService)
 	configHandler := handler.NewConfigHandler(userConfigRepo, encryptor, aiFactory)
 	storyHandler := handler.NewStoryHandler(repo, aiFactory)
 	imageHandler := handler.NewImageHandler(repo, aiFactory)
@@ -63,6 +64,8 @@ func SetupRouter(
 			auth.POST("/refresh", authHandler.Refresh)
 			auth.POST("/forgot-password", authHandler.RequestPasswordReset)
 			auth.POST("/reset-password", authHandler.ResetPassword)
+			auth.POST("/send-code", authHandler.SendVerificationCode)
+			auth.POST("/verify-code", authHandler.VerifyCode)
 		}
 
 		// Me routes (protected)
