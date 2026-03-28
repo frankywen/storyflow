@@ -3,6 +3,7 @@ package model
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,7 +28,7 @@ func (j *JSONB) Scan(value interface{}) error {
 	}
 	bytes, ok := value.([]byte)
 	if !ok {
-		return nil
+		return fmt.Errorf("cannot scan %T into JSONB", value)
 	}
 	return json.Unmarshal(bytes, j)
 }
