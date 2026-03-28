@@ -6,17 +6,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	"storyflow/internal/repository"
 	"storyflow/internal/service"
 )
 
 // StoryHandler handles story-related HTTP requests
 type StoryHandler struct {
-	service *service.StoryService
+	repo      *repository.StoryRepository
+	aiFactory *service.AIServiceFactory
 }
 
 // NewStoryHandler creates a new story handler
-func NewStoryHandler(service *service.StoryService) *StoryHandler {
-	return &StoryHandler{service: service}
+func NewStoryHandler(repo *repository.StoryRepository, aiFactory *service.AIServiceFactory) *StoryHandler {
+	return &StoryHandler{repo: repo, aiFactory: aiFactory}
 }
 
 // CreateStoryRequest represents the request body for creating a story
@@ -30,27 +33,18 @@ type ParseStoryRequest struct {
 	Style string `json:"style"` // manga, manhwa, western_comic, realistic, anime
 }
 
-// StoryResponse represents a story response
-type StoryResponse struct {
-	ID         uuid.UUID `json:"id"`
-	Title      string    `json:"title"`
-	Content    string    `json:"content,omitempty"`
-	Summary    string    `json:"summary"`
-	Genre      string    `json:"genre"`
-	Status     string    `json:"status"`
-	CreatedAt  string    `json:"created_at"`
-	UpdatedAt  string    `json:"updated_at"`
-}
-
 // CreateStory handles POST /api/v1/stories
 func (h *StoryHandler) CreateStory(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	var req CreateStoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	story, err := h.service.CreateStory(c.Request.Context(), req.Title, req.Content)
+	storyService := service.NewStoryService(h.repo, h.aiFactory)
+	story, err := storyService.CreateStory(c.Request.Context(), userID, req.Title, req.Content)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -66,13 +60,15 @@ func (h *StoryHandler) CreateStory(c *gin.Context) {
 
 // GetStory handles GET /api/v1/stories/:id
 func (h *StoryHandler) GetStory(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story ID"})
 		return
 	}
 
-	story, err := h.service.GetStoryWithRelations(c.Request.Context(), id)
+	story, err := h.repo.GetWithRelationsForUser(c.Request.Context(), userID, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
 		return
@@ -81,8 +77,10 @@ func (h *StoryHandler) GetStory(c *gin.Context) {
 	c.JSON(http.StatusOK, story)
 }
 
-// ListStories handles GET /api/v1/stories
+// ListStories handles GET /api/v1/stories (with filters)
 func (h *StoryHandler) ListStories(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	page := 1
 	pageSize := 20
 
@@ -98,22 +96,29 @@ func (h *StoryHandler) ListStories(c *gin.Context) {
 		}
 	}
 
-	stories, total, err := h.service.ListStories(c.Request.Context(), page, pageSize)
+	// Filter parameters
+	status := c.Query("status")
+	search := c.Query("search")
+
+	offset := (page - 1) * pageSize
+	stories, total, err := h.repo.ListByUserWithFilters(c.Request.Context(), userID, offset, pageSize, status, search)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":       stories,
-		"total":      total,
-		"page":       page,
-		"page_size":  pageSize,
+		"data":      stories,
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
 	})
 }
 
 // ParseStory handles POST /api/v1/stories/:id/parse
 func (h *StoryHandler) ParseStory(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story ID"})
@@ -125,7 +130,8 @@ func (h *StoryHandler) ParseStory(c *gin.Context) {
 		req.Style = "manga" // default style
 	}
 
-	story, err := h.service.ParseStory(c.Request.Context(), id, req.Style)
+	storyService := service.NewStoryService(h.repo, h.aiFactory)
+	story, err := storyService.ParseStory(c.Request.Context(), userID, id, req.Style)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -144,13 +150,22 @@ func (h *StoryHandler) ParseStory(c *gin.Context) {
 
 // GetCharacters handles GET /api/v1/stories/:id/characters
 func (h *StoryHandler) GetCharacters(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story ID"})
 		return
 	}
 
-	characters, err := h.service.GetCharacters(c.Request.Context(), id)
+	// Verify story belongs to user
+	_, err = h.repo.GetByUserAndID(c.Request.Context(), userID, id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
+		return
+	}
+
+	characters, err := h.repo.GetCharactersByStoryID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -163,13 +178,22 @@ func (h *StoryHandler) GetCharacters(c *gin.Context) {
 
 // GetScenes handles GET /api/v1/stories/:id/scenes
 func (h *StoryHandler) GetScenes(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story ID"})
 		return
 	}
 
-	scenes, err := h.service.GetScenes(c.Request.Context(), id)
+	// Verify story belongs to user
+	_, err = h.repo.GetByUserAndID(c.Request.Context(), userID, id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
+		return
+	}
+
+	scenes, err := h.repo.GetScenesByStoryID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -180,20 +204,91 @@ func (h *StoryHandler) GetScenes(c *gin.Context) {
 	})
 }
 
-// DeleteStory handles DELETE /api/v1/stories/:id
+// DeleteStory handles DELETE /api/v1/stories/:id (soft delete)
 func (h *StoryHandler) DeleteStory(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story ID"})
 		return
 	}
 
-	if err := h.service.DeleteStory(c.Request.Context(), id); err != nil {
+	if err := h.repo.SoftDeleteStory(c.Request.Context(), userID, id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "story deleted"})
+}
+
+// RestoreStory handles POST /api/v1/stories/:id/restore
+func (h *StoryHandler) RestoreStory(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story ID"})
+		return
+	}
+
+	if err := h.repo.RestoreStory(c.Request.Context(), userID, id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "story restored"})
+}
+
+// UpdateStoryRequest represents the request body for updating a story
+type UpdateStoryRequest struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+// UpdateStory handles PUT /api/v1/stories/:id
+func (h *StoryHandler) UpdateStory(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story ID"})
+		return
+	}
+
+	var req UpdateStoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get existing story
+	story, err := h.repo.GetByUserAndID(c.Request.Context(), userID, id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
+		return
+	}
+
+	// Update fields
+	if req.Title != "" {
+		story.Title = req.Title
+	}
+	if req.Content != "" {
+		story.Content = req.Content
+		// Reset status to draft when content changes, so user can re-parse
+		if story.Status != "draft" {
+			story.Status = "draft"
+		}
+	}
+
+	if err := h.repo.Update(c.Request.Context(), story); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Return updated story with relations
+	updatedStory, _ := h.repo.GetWithRelationsForUser(c.Request.Context(), userID, id)
+	c.JSON(http.StatusOK, updatedStory)
 }
 
 func parseInt(s string) (int, error) {

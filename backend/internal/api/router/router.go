@@ -111,6 +111,7 @@ func SetupRouter(
 				stories.GET("/:id", storyHandler.GetStory)
 				stories.PUT("/:id", storyHandler.UpdateStory)
 				stories.DELETE("/:id", storyHandler.DeleteStory)
+				stories.POST("/:id/restore", storyHandler.RestoreStory)
 				stories.POST("/:id/parse", storyHandler.ParseStory)
 				stories.GET("/:id/characters", storyHandler.GetCharacters)
 				stories.GET("/:id/scenes", storyHandler.GetScenes)
