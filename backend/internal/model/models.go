@@ -9,15 +9,18 @@ import (
 
 // Story represents a story/novel input
 type Story struct {
-	ID          uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	Title       string    `json:"title" gorm:"not null"`
-	Content     string    `json:"content" gorm:"type:text"`
-	Summary     string    `json:"summary" gorm:"type:text"`
-	Genre       string    `json:"genre"` // romance, suspense, fantasy, etc.
-	Status      string    `json:"status" gorm:"default:'pending'"` // pending, parsed, generating, completed
-	MergedVideoURL string `json:"merged_video_url" gorm:"type:text"` // URL for merged video
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          uuid.UUID  `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	UserID      uuid.UUID  `json:"user_id" gorm:"type:uuid;not null;index"` // Owner of the story
+	Title       string     `json:"title" gorm:"not null"`
+	Content     string     `json:"content" gorm:"type:text"`
+	Summary     string     `json:"summary" gorm:"type:text"`
+	Genre       string     `json:"genre"` // romance, suspense, fantasy, etc.
+	Status      string     `json:"status" gorm:"default:'pending'"` // pending, parsed, generating, completed
+	CoverURL    string     `json:"cover_url" gorm:"type:text"`
+	MergedVideoURL string  `json:"merged_video_url" gorm:"type:text"` // URL for merged video
+	DeletedAt   *time.Time `json:"deleted_at" gorm:"index"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 
 	// Relationships
 	Characters []Character `json:"characters,omitempty"`
