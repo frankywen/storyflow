@@ -38,7 +38,9 @@ func (s *SubtitleService) GenerateSubtitles(ctx context.Context, storyID uuid.UU
 	}
 
 	// 删除旧字幕
-	s.audioRepo.DeleteSubtitlesByStory(ctx, storyID)
+	if err := s.audioRepo.DeleteSubtitlesByStory(ctx, storyID); err != nil {
+		return fmt.Errorf("failed to delete old subtitles: %w", err)
+	}
 
 	// 按时间轴生成字幕
 	currentTime := 0.0
