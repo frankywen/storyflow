@@ -1,14 +1,20 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
+	"golang.org/x/crypto/bcrypt"
 	"storyflow/internal/api/router"
+	"storyflow/internal/auth"
+	"storyflow/internal/model"
 	"storyflow/internal/repository"
-	"storyflow/pkg/ai"
+	"storyflow/internal/service"
+	"storyflow/pkg/crypto"
 	"storyflow/pkg/database"
 )
 
@@ -35,82 +41,114 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
+	// Auto migrate
+	if err := db.AutoMigrate(
+		&model.User{},
+		&model.UserConfig{},
+		&model.RefreshToken{},
+		&model.PasswordResetToken{},
+		&model.EmailVerificationCode{},
+		&model.TokenBlacklist{},
+		&model.Story{},
+		&model.Character{},
+		&model.Scene{},
+		&model.Image{},
+		&model.GenerationJob{},
+	); err != nil {
+		log.Fatal("Failed to auto migrate:", err)
+	}
+
 	// Initialize repositories
 	storyRepo := repository.NewStoryRepository(db)
+	userRepo := repository.NewUserRepository(db)
+	userConfigRepo := repository.NewUserConfigRepository(db)
+	tokenRepo := repository.NewRefreshTokenRepository(db)
+	resetTokenRepo := repository.NewPasswordResetTokenRepository(db)
 
-	// Initialize LLM provider
-	llmProvider := getEnv("LLM_PROVIDER", "claude")
-	llmAPIKey := getEnv("LLM_API_KEY", "")
-	if llmAPIKey == "" {
-		llmAPIKey = getEnv("CLAUDE_API_KEY", "") // Fallback to CLAUDE_API_KEY
-	}
-	llmModel := getEnv("LLM_MODEL", "")
-	llmBaseURL := getEnv("LLM_BASE_URL", "")
+	// Seed initial admin user if no admin exists
+	seedAdminUser(userRepo)
 
-	if llmAPIKey == "" {
-		log.Printf("Warning: No LLM API key configured. Set LLM_API_KEY or %s_API_KEY", llmProvider)
-	}
+	// Initialize encryption service
+	encryptionSecret := getEnv("ENCRYPTION_SECRET", "storyflow-default-encryption-key-32b")
+	encryptor := crypto.NewEncryptor(encryptionSecret)
 
-	llmCfg := ai.LLMConfig{
-		Provider: llmProvider,
-		APIKey:   llmAPIKey,
-		Model:    llmModel,
-		BaseURL:  llmBaseURL,
-	}
-	llmClient := ai.NewLLMProvider(llmCfg)
-	log.Printf("Using LLM provider: %s", llmClient.GetName())
+	// Initialize JWT service
+	jwtConfig := auth.DefaultJWTConfig()
+	jwtConfig.AccessTokenSecret = getEnv("JWT_ACCESS_SECRET", "storyflow-access-secret-key")
+	jwtConfig.RefreshTokenSecret = getEnv("JWT_REFRESH_SECRET", "storyflow-refresh-secret-key")
+	jwtService := auth.NewJWTService(jwtConfig)
 
-	// Initialize image generator
-	imageProvider := getEnv("IMAGE_PROVIDER", "comfyui")
-	imageAPIKey := getEnv("IMAGE_API_KEY", "")
-	imageBaseURL := getEnv("IMAGE_BASE_URL", "")
-	imageModel := getEnv("IMAGE_MODEL", "")
-
-	// Provider-specific defaults
-	if imageBaseURL == "" {
-		switch imageProvider {
-		case "comfyui":
-			imageBaseURL = getEnv("COMFYUI_URL", "http://localhost:8188")
-		case "volcengine", "doubao":
-			imageBaseURL = "https://ark.cn-beijing.volces.com/api/v3"
-		case "alibaba", "wanxiang":
-			imageBaseURL = "https://dashscope.aliyuncs.com/api/v1"
-		}
-	}
-
-	imageCfg := ai.ImageGeneratorConfig{
-		Provider: imageProvider,
-		APIKey:   imageAPIKey,
-		BaseURL:  imageBaseURL,
-		Model:    imageModel,
-	}
-	imageGenerator := ai.NewImageGenerator(imageCfg)
-	log.Printf("Using image generator: %s", imageGenerator.GetName())
-
-	// Initialize video generator
-	videoProvider := getEnv("VIDEO_PROVIDER", "")
-	videoAPIKey := getEnv("VIDEO_API_KEY", "")
-	videoBaseURL := getEnv("VIDEO_BASE_URL", "")
-	videoModel := getEnv("VIDEO_MODEL", "")
-
-	videoCfg := ai.VideoGeneratorConfig{
-		Provider: videoProvider,
-		APIKey:   videoAPIKey,
-		BaseURL:  videoBaseURL,
-		Model:    videoModel,
-	}
-	videoGenerator := ai.NewVideoGenerator(videoCfg)
-	log.Printf("Using video generator: %s", videoGenerator.GetName())
+	// Initialize services
+	authService := service.NewAuthService(userRepo, tokenRepo, resetTokenRepo, jwtService, encryptor)
+	aiFactory := service.NewAIServiceFactory(userConfigRepo, encryptor)
+	emailService := service.NewEmailService(userRepo)
+	rateLimitService := service.NewRateLimitService(60, time.Minute)
 
 	// Setup router
-	r := router.SetupRouter(llmClient, imageGenerator, videoGenerator, storyRepo)
+	r := router.SetupRouter(
+		jwtService,
+		authService,
+		aiFactory,
+		encryptor,
+		storyRepo,
+		userRepo,
+		userConfigRepo,
+		emailService,
+		rateLimitService,
+	)
 
 	// Start server
 	port := getEnv("PORT", "8080")
-	log.Printf("StoryFlow server starting on port %s", port)
+	log.Printf("StoryFlow server starting on port %s (multi-tenant mode)", port)
 	if err := r.Run(":" + port); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
+}
+
+// seedAdminUser creates an initial admin user if no admin exists
+func seedAdminUser(userRepo *repository.UserRepository) {
+	ctx := context.Background()
+
+	// Check if any admin exists
+	adminCount, err := userRepo.Count(ctx, "", "admin")
+	if err != nil {
+		log.Printf("Failed to check admin count: %v", err)
+		return
+	}
+
+	if adminCount > 0 {
+		log.Printf("Admin user already exists (count: %d)", adminCount)
+		return
+	}
+
+	// Get admin credentials from environment
+	adminEmail := getEnv("ADMIN_EMAIL", "admin@storyflow.local")
+	adminPassword := getEnv("ADMIN_PASSWORD", "admin123456")
+	adminName := getEnv("ADMIN_NAME", "Admin")
+
+	// Hash password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("Failed to hash admin password: %v", err)
+		return
+	}
+
+	// Create admin user
+	admin := &model.User{
+		Email:        adminEmail,
+		Name:         adminName,
+		PasswordHash: string(hashedPassword),
+		Role:         model.RoleAdmin,
+		Status:       "active",
+	}
+
+	if err := userRepo.Create(ctx, admin); err != nil {
+		log.Printf("Failed to create admin user: %v", err)
+		return
+	}
+
+	log.Printf("Created initial admin user: %s (password: %s)", adminEmail, adminPassword)
+	log.Println("Please change the admin password immediately after first login!")
 }
 
 func getEnv(key, defaultValue string) string {
