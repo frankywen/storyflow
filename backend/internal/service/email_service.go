@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"storyflow/internal/model"
@@ -26,7 +27,10 @@ func NewEmailService(repo *repository.UserRepository) *EmailService {
 // GenerateCode 生成6位验证码
 func (s *EmailService) GenerateCode() string {
 	b := make([]byte, 3)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// 如果随机数生成失败，使用时间戳作为后备方案
+		return fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
+	}
 	return hex.EncodeToString(b)[:6]
 }
 

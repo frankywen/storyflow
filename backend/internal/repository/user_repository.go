@@ -297,13 +297,19 @@ func (r *UserRepository) MarkCodeAsUsed(ctx context.Context, id uuid.UUID) error
 		Update("is_used", true).Error
 }
 
-// CanSendCode 检查是否可以发送验证码（60秒间隔）
+// CanSendCode checks if a verification code can be sent (60-second interval)
+// Returns false if rate limited, true if can send
+// Returns true on database error (fail-open for availability)
 func (r *UserRepository) CanSendCode(ctx context.Context, email string) bool {
 	var count int64
-	r.db.WithContext(ctx).
+	if err := r.db.WithContext(ctx).
 		Model(&model.EmailVerificationCode{}).
 		Where("email = ? AND created_at > ?", email, time.Now().Add(-60*time.Second)).
-		Count(&count)
+		Count(&count).Error; err != nil {
+		// Log error but allow sending (fail-open for availability)
+		// In production, consider logging: log.Printf("CanSendCode error: %v", err)
+		return true
+	}
 	return count == 0
 }
 
