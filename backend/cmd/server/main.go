@@ -97,9 +97,11 @@ func main() {
 	rateLimitService := service.NewRateLimitService(60, time.Minute)
 
 	// Initialize TTS provider
+	ttsOutputDir := getEnv("TTS_OUTPUT_DIR", "./uploads/audio")
+	audioBaseURL := getEnv("AUDIO_BASE_URL", "http://localhost:8080/uploads/audio")
 	ttsProvider := tts.NewEdgeTTSProvider(tts.EdgeTTSConfig{
-		OutputDir:    getEnv("TTS_OUTPUT_DIR", "./uploads/audio"),
-		AudioBaseURL: getEnv("AUDIO_BASE_URL", "http://localhost:8080/uploads/audio"),
+		OutputDir:    ttsOutputDir,
+		AudioBaseURL: audioBaseURL,
 		Timeout:      60 * time.Second,
 	})
 
@@ -108,8 +110,8 @@ func main() {
 		audioRepo,
 		storyRepo,
 		ttsProvider,
-		getEnv("TTS_OUTPUT_DIR", "./uploads/audio"),
-		getEnv("AUDIO_BASE_URL", "http://localhost:8080/uploads/audio"),
+		ttsOutputDir,
+		audioBaseURL,
 	)
 
 	// Initialize subtitle service
