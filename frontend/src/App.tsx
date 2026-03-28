@@ -1,7 +1,22 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom'
-import { FileText, Image, Settings, Trash2, RefreshCw, Download, Video, Check, Upload, User, Film } from 'lucide-react'
+import { FileText, Image, Settings, Trash2, RefreshCw, Download, Video, Upload, User, Film, LogOut, Shield, Edit3, Save, X, Volume2 } from 'lucide-react'
+
+// Auth
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import ProtectedRoute from './components/auth/ProtectedRoute'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
+import ConfigPage from './pages/ConfigPage'
+import AdminPage from './pages/AdminPage'
+import AudioConfigPage from './pages/AudioConfigPage'
+
+// API
 import { storyApi, imageApi, exportApi, videoApi, characterApi } from './services/api'
+
+// Types
 import { Story, Character } from './types'
 
 // Pages
@@ -23,9 +38,9 @@ const HomePage = () => (
         <p className="text-gray-500 text-sm">查看已创建的故事和生成进度</p>
       </Link>
 
-      <Link to="/settings" className="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow border">
+      <Link to="/config" className="p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow border">
         <Settings className="w-8 h-8 text-purple-500 mb-3" />
-        <h2 className="text-xl font-semibold mb-2">设置</h2>
+        <h2 className="text-xl font-semibold mb-2">配置</h2>
         <p className="text-gray-500 text-sm">配置AI模型和生成参数</p>
       </Link>
     </div>
@@ -48,13 +63,18 @@ const HomePage = () => (
           生成图片
         </div>
         <span className="text-gray-400">→</span>
+        <div className="flex items-center gap-2 px-4 py-2 bg-teal-50 rounded-lg">
+          <span className="w-6 h-6 bg-teal-500 text-white rounded-full flex items-center justify-center text-xs">4</span>
+          配音字幕
+        </div>
+        <span className="text-gray-400">→</span>
         <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-lg">
-          <span className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs">4</span>
+          <span className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs">5</span>
           视频生成
         </div>
         <span className="text-gray-400">→</span>
         <div className="flex items-center gap-2 px-4 py-2 bg-green-50 rounded-lg">
-          <span className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs">5</span>
+          <span className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs">6</span>
           导出
         </div>
       </div>
@@ -64,9 +84,9 @@ const HomePage = () => (
 
 const NewStoryPage = () => {
   const navigate = useNavigate()
-  const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [title, setTitle] = React.useState('')
+  const [content, setContent] = React.useState('')
+  const [loading, setLoading] = React.useState(false)
 
   const handleSubmit = async () => {
     if (!title || !content) return
@@ -126,8 +146,8 @@ const NewStoryPage = () => {
 }
 
 const StoryListPage = () => {
-  const [stories, setStories] = useState<Story[]>([])
-  const [loading, setLoading] = useState(true)
+  const [stories, setStories] = React.useState<Story[]>([])
+  const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
     loadStories()
@@ -194,7 +214,7 @@ const CharacterCard = ({
   onRegenerate: (id: string) => void
   onUpload: (id: string, file: File) => void
 }) => {
-  const [uploading, setUploading] = useState(false)
+  const [uploading, setUploading] = React.useState(false)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -263,18 +283,22 @@ const CharacterCard = ({
 const StoryDetailPage = () => {
   const id = window.location.pathname.split('/').pop() || ''
   const navigate = useNavigate()
-  const [story, setStory] = useState<Story | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [parsing, setParsing] = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [generatingVideo, setGeneratingVideo] = useState(false)
-  const [videoProgress, setVideoProgress] = useState(0)
-  const [mergingVideo, setMergingVideo] = useState(false)
-  const [mergedVideo, setMergedVideo] = useState<{ url: string; duration: number } | null>(null)
-  const [exporting, setExporting] = useState(false)
-  const [selectedStyle, setSelectedStyle] = useState('manga')
+  const [story, setStory] = React.useState<Story | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [parsing, setParsing] = React.useState(false)
+  const [generating, setGenerating] = React.useState(false)
+  const [generatingVideo, setGeneratingVideo] = React.useState(false)
+  const [videoProgress, setVideoProgress] = React.useState(0)
+  const [mergingVideo, setMergingVideo] = React.useState(false)
+  const [mergedVideo, setMergedVideo] = React.useState<{ url: string; duration: number } | null>(null)
+  const [exporting, setExporting] = React.useState(false)
+  const [selectedStyle, setSelectedStyle] = React.useState('manga')
+  const [isEditing, setIsEditing] = React.useState(false)
+  const [editTitle, setEditTitle] = React.useState('')
+  const [editContent, setEditContent] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
 
-  useEffect(() => {
+  React.useEffect(() => {
     loadStory()
   }, [id])
 
@@ -302,7 +326,7 @@ const StoryDetailPage = () => {
       const res = await storyApi.parse(id, selectedStyle)
       setStory(res.data)
     } catch (err) {
-      alert('解析失败，请检查CLAUDE_API_KEY是否配置')
+      alert('解析失败，请检查API配置')
     } finally {
       setParsing(false)
     }
@@ -314,7 +338,7 @@ const StoryDetailPage = () => {
       await imageApi.batchGenerate(id, selectedStyle)
       alert('图片生成任务已启动，请稍后刷新页面查看结果')
     } catch (err) {
-      alert('生成失败，请检查ComfyUI是否启动')
+      alert('生成失败，请检查图片服务配置')
     } finally {
       setGenerating(false)
     }
@@ -327,6 +351,40 @@ const StoryDetailPage = () => {
       navigate('/stories')
     } catch (err) {
       alert('删除失败')
+    }
+  }
+
+  const handleStartEdit = () => {
+    if (story) {
+      setEditTitle(story.title)
+      setEditContent(story.content || '')
+      setIsEditing(true)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    setEditTitle('')
+    setEditContent('')
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editTitle.trim() || !editContent.trim()) {
+      alert('标题和内容不能为空')
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await storyApi.update(id, {
+        title: editTitle,
+        content: editContent,
+      })
+      setStory(res.data)
+      setIsEditing(false)
+    } catch (err) {
+      alert('保存失败')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -364,7 +422,7 @@ const StoryDetailPage = () => {
       // Batch generation processes multiple scenes, poll story to check for videos
       pollForVideos()
     } catch (err) {
-      alert('视频生成失败，请检查VIDEO_PROVIDER是否配置或余额是否充足')
+      alert('视频生成失败，请检查视频服务配置或余额是否充足')
       setGeneratingVideo(false)
     }
   }
@@ -472,17 +530,58 @@ const StoryDetailPage = () => {
   return (
     <div className="p-8">
       <div className="flex justify-between items-start mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">{story.title}</h1>
-          <p className="text-gray-500 mt-1">{story.summary}</p>
+        <div className="flex-1">
+          {isEditing ? (
+            <input
+              type="text"
+              className="text-2xl font-bold w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="故事标题"
+            />
+          ) : (
+            <h1 className="text-2xl font-bold">{story.title}</h1>
+          )}
+          {!isEditing && <p className="text-gray-500 mt-1">{story.summary}</p>}
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handleDelete}
-            className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-          >
-            <Trash2 className="w-5 h-5" />
-          </button>
+        <div className="flex gap-2 ml-4">
+          {isEditing ? (
+            <>
+              <button
+                onClick={handleSaveEdit}
+                disabled={saving}
+                className="flex items-center gap-1 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400"
+              >
+                <Save className="w-4 h-4" />
+                {saving ? '保存中...' : '保存'}
+              </button>
+              <button
+                onClick={handleCancelEdit}
+                disabled={saving}
+                className="flex items-center gap-1 px-3 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+                取消
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleStartEdit}
+                className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"
+                title="编辑故事"
+              >
+                <Edit3 className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleDelete}
+                className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                title="删除故事"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -551,6 +650,17 @@ const StoryDetailPage = () => {
                   </span>
                 )}
               </div>
+            )}
+
+            {/* Audio Config Button */}
+            {story.status === 'parsed' && (
+              <Link
+                to={`/stories/${id}/audio`}
+                className="px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 flex items-center gap-2"
+              >
+                <Volume2 className="w-4 h-4" />
+                配音与字幕
+              </Link>
             )}
 
             {/* Merge Videos Button */}
@@ -691,177 +801,138 @@ const StoryDetailPage = () => {
       )}
 
       {/* Raw Content */}
-      <details className="bg-white rounded-lg shadow p-4">
-        <summary className="font-semibold cursor-pointer">原始文本</summary>
-        <pre className="mt-4 text-sm text-gray-600 whitespace-pre-wrap">{story.content}</pre>
-      </details>
+      {isEditing ? (
+        <div className="bg-white rounded-lg shadow p-4">
+          <label className="block font-semibold mb-2">原始文本</label>
+          <textarea
+            className="w-full h-96 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            placeholder="故事内容..."
+          />
+          <p className="mt-2 text-sm text-gray-500">
+            修改内容后保存，故事状态将重置为草稿，需要重新解析。
+          </p>
+        </div>
+      ) : (
+        <details className="bg-white rounded-lg shadow p-4" open>
+          <summary className="font-semibold cursor-pointer">原始文本</summary>
+          <pre className="mt-4 text-sm text-gray-600 whitespace-pre-wrap">{story.content || ''}</pre>
+        </details>
+      )}
     </div>
   )
 }
 
-const SettingsPage = () => {
-  const [settings, setSettings] = useState({
-    llmProvider: 'claude',
-    llmApiKey: '',
-    llmModel: '',
-    imageProvider: 'comfyui',
-    imageApiKey: '',
-    imageBaseUrl: '',
-    defaultStyle: 'manga',
-  })
-  const [saved, setSaved] = useState(false)
+// Navigation bar with auth
+const NavBar = () => {
+  const { user, isAuthenticated, logout } = useAuth()
 
-  useEffect(() => {
-    // Load settings from localStorage
-    const savedSettings = localStorage.getItem('storyflow_settings')
-    if (savedSettings) {
-      setSettings(JSON.parse(savedSettings))
-    }
-  }, [])
-
-  const handleSave = () => {
-    localStorage.setItem('storyflow_settings', JSON.stringify(settings))
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  const handleChange = (field: string, value: string) => {
-    setSettings(prev => ({ ...prev, [field]: value }))
+  const handleLogout = async () => {
+    await logout()
   }
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">设置</h1>
-
-      <div className="max-w-2xl space-y-6">
-        {/* LLM Provider Settings */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="font-semibold mb-4">大语言模型 (LLM) 配置</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">LLM 提供商</label>
-              <select
-                className="w-full px-4 py-2 border rounded-lg"
-                value={settings.llmProvider}
-                onChange={(e) => handleChange('llmProvider', e.target.value)}
+    <nav className="bg-white shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <Link to="/" className="text-xl font-bold text-gray-800 flex items-center gap-2">
+          <FileText className="w-6 h-6 text-blue-500" />
+          StoryFlow
+        </Link>
+        <div className="flex items-center gap-4 text-sm">
+          {isAuthenticated ? (
+            <>
+              <Link to="/stories/new" className="text-gray-600 hover:text-gray-800">
+                新建
+              </Link>
+              <Link to="/stories" className="text-gray-600 hover:text-gray-800">
+                故事列表
+              </Link>
+              <Link to="/config" className="text-gray-600 hover:text-gray-800">
+                配置
+              </Link>
+              {user?.role === 'admin' && (
+                <Link to="/admin" className="text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                  <Shield className="w-4 h-4" />
+                  管理后台
+                </Link>
+              )}
+              <span className="text-gray-400">|</span>
+              <span className="text-gray-600">{user?.email}</span>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1 text-gray-600 hover:text-gray-800"
               >
-                <option value="claude">Claude (Anthropic)</option>
-                <option value="volcengine">火山引擎 / 豆包</option>
-                <option value="alibaba">阿里云 / 通义千问</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">API Key</label>
-              <input
-                type="password"
-                className="w-full px-4 py-2 border rounded-lg"
-                placeholder="sk-..."
-                value={settings.llmApiKey}
-                onChange={(e) => handleChange('llmApiKey', e.target.value)}
-              />
-              <p className="text-xs text-gray-500 mt-1">用于故事解析和角色提取</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">模型</label>
-              <input
-                type="text"
-                className="w-full px-4 py-2 border rounded-lg"
-                placeholder="claude-sonnet-4-20250514"
-                value={settings.llmModel}
-                onChange={(e) => handleChange('llmModel', e.target.value)}
-              />
-              <p className="text-xs text-gray-500 mt-1">留空使用默认模型</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Image Generation Settings */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="font-semibold mb-4">图片生成配置</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">图片生成提供商</label>
-              <select
-                className="w-full px-4 py-2 border rounded-lg"
-                value={settings.imageProvider}
-                onChange={(e) => handleChange('imageProvider', e.target.value)}
-              >
-                <option value="comfyui">ComfyUI (本地 GPU)</option>
-                <option value="volcengine">火山引擎 / 豆包</option>
-                <option value="alibaba">阿里云 / 通义万相</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">API Key</label>
-              <input
-                type="password"
-                className="w-full px-4 py-2 border rounded-lg"
-                placeholder="API Key (云端服务需要)"
-                value={settings.imageApiKey}
-                onChange={(e) => handleChange('imageApiKey', e.target.value)}
-              />
-              <p className="text-xs text-gray-500 mt-1">ComfyUI 本地部署无需配置</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">服务地址</label>
-              <input
-                type="text"
-                className="w-full px-4 py-2 border rounded-lg"
-                placeholder="http://localhost:8188"
-                value={settings.imageBaseUrl}
-                onChange={(e) => handleChange('imageBaseUrl', e.target.value)}
-              />
-              <p className="text-xs text-gray-500 mt-1">ComfyUI 服务地址或云端 API 地址</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Default Style Settings */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="font-semibold mb-4">默认风格</h2>
-          <select
-            className="w-full px-4 py-2 border rounded-lg"
-            value={settings.defaultStyle}
-            onChange={(e) => handleChange('defaultStyle', e.target.value)}
-          >
-            <option value="manga">日式漫画</option>
-            <option value="manhwa">韩式漫画</option>
-            <option value="western_comic">美式漫画</option>
-            <option value="anime">动漫风格</option>
-            <option value="realistic">写实风格</option>
-          </select>
-        </div>
-
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-          <p className="font-medium mb-1">配置说明</p>
-          <ul className="list-disc list-inside space-y-1 text-xs">
-            <li>LLM 用于解析小说、提取角色和生成图片提示词</li>
-            <li>图片生成支持本地 ComfyUI 和云端服务</li>
-            <li>配置修改后需要重启后端服务生效</li>
-            <li>火山引擎和阿里云需要申请对应的 API Key</li>
-            <li>前端设置保存在浏览器本地存储，后端配置请修改 .env 文件</li>
-          </ul>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button
-            className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2"
-            onClick={handleSave}
-          >
-            {saved ? (
-              <>
-                <Check className="w-4 h-4" />
-                已保存
-              </>
-            ) : (
-              '保存设置'
-            )}
-          </button>
-          {saved && (
-            <span className="text-green-600 text-sm">设置已保存到浏览器本地存储</span>
+                <LogOut className="w-4 h-4" />
+                退出
+              </button>
+            </>
+          ) : (
+            <>
+              <Link to="/login" className="px-4 py-1.5 text-blue-500 hover:text-blue-600">
+                登录
+              </Link>
+              <Link to="/register" className="px-4 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                注册
+              </Link>
+            </>
           )}
         </div>
       </div>
+    </nav>
+  )
+}
+
+function AppContent() {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <NavBar />
+      <main className="max-w-7xl mx-auto">
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+          {/* Protected routes */}
+          <Route path="/" element={
+            <ProtectedRoute>
+              <HomePage />
+            </ProtectedRoute>
+          } />
+          <Route path="/stories/new" element={
+            <ProtectedRoute>
+              <NewStoryPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/stories" element={
+            <ProtectedRoute>
+              <StoryListPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/stories/:id" element={
+            <ProtectedRoute>
+              <StoryDetailPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/stories/:id/audio" element={
+            <ProtectedRoute>
+              <AudioConfigPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/config" element={
+            <ProtectedRoute>
+              <ConfigPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin" element={
+            <ProtectedRoute>
+              <AdminPage />
+            </ProtectedRoute>
+          } />
+        </Routes>
+      </main>
     </div>
   )
 }
@@ -869,37 +940,9 @@ const SettingsPage = () => {
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50">
-        <nav className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-            <Link to="/" className="text-xl font-bold text-gray-800 flex items-center gap-2">
-              <FileText className="w-6 h-6 text-blue-500" />
-              StoryFlow
-            </Link>
-            <div className="flex gap-4 text-sm">
-              <Link to="/stories/new" className="text-gray-600 hover:text-gray-800">
-                新建
-              </Link>
-              <Link to="/stories" className="text-gray-600 hover:text-gray-800">
-                故事列表
-              </Link>
-              <Link to="/settings" className="text-gray-600 hover:text-gray-800">
-                设置
-              </Link>
-            </div>
-          </div>
-        </nav>
-
-        <main className="max-w-7xl mx-auto">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/stories/new" element={<NewStoryPage />} />
-            <Route path="/stories" element={<StoryListPage />} />
-            <Route path="/stories/:id" element={<StoryDetailPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
-        </main>
-      </div>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </BrowserRouter>
   )
 }
