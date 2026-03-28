@@ -236,6 +236,12 @@ func (h *AuthHandler) VerifyCode(c *gin.Context) {
 		return
 	}
 
+	// Validate code_type
+	if input.CodeType != "register" && input.CodeType != "reset_password" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid code type"})
+		return
+	}
+
 	err := h.emailService.VerifyCode(c.Request.Context(), input.Email, input.Code, input.CodeType)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
