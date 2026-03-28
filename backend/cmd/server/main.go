@@ -88,12 +88,12 @@ func main() {
 	r := router.SetupRouter(
 		jwtService,
 		authService,
+		emailService,
 		aiFactory,
 		encryptor,
 		storyRepo,
 		userRepo,
 		userConfigRepo,
-		emailService,
 		rateLimitService,
 	)
 
