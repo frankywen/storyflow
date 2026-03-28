@@ -114,3 +114,34 @@ func (r *AudioRepository) GetVoiceMapping(ctx context.Context, standardVoiceID, 
 	}
 	return &mapping, nil
 }
+
+// VideoSynthesisTask methods
+
+func (r *AudioRepository) CreateVideoSynthesisTask(ctx context.Context, task *model.VideoSynthesisTask) error {
+	return r.db.WithContext(ctx).Create(task).Error
+}
+
+func (r *AudioRepository) GetVideoSynthesisTask(ctx context.Context, taskID uuid.UUID) (*model.VideoSynthesisTask, error) {
+	var task model.VideoSynthesisTask
+	err := r.db.WithContext(ctx).First(&task, "id = ?", taskID).Error
+	if err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
+func (r *AudioRepository) UpdateVideoSynthesisTask(ctx context.Context, task *model.VideoSynthesisTask) error {
+	return r.db.WithContext(ctx).Save(task).Error
+}
+
+func (r *AudioRepository) GetVideoSynthesisTaskByStory(ctx context.Context, storyID uuid.UUID) (*model.VideoSynthesisTask, error) {
+	var task model.VideoSynthesisTask
+	err := r.db.WithContext(ctx).
+		Where("story_id = ?", storyID).
+		Order("created_at DESC").
+		First(&task).Error
+	if err != nil {
+		return nil, err
+	}
+	return &task, nil
+}

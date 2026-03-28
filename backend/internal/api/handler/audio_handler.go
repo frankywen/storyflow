@@ -11,16 +11,23 @@ import (
 )
 
 type AudioHandler struct {
-	audioService    *service.AudioService
-	subtitleService *service.SubtitleService
-	storyRepo       *repository.StoryRepository
+	audioService           *service.AudioService
+	subtitleService        *service.SubtitleService
+	videoSynthesisService  *service.VideoSynthesisService
+	storyRepo              *repository.StoryRepository
 }
 
-func NewAudioHandler(audioService *service.AudioService, subtitleService *service.SubtitleService, storyRepo *repository.StoryRepository) *AudioHandler {
+func NewAudioHandler(
+	audioService *service.AudioService,
+	subtitleService *service.SubtitleService,
+	videoSynthesisService *service.VideoSynthesisService,
+	storyRepo *repository.StoryRepository,
+) *AudioHandler {
 	return &AudioHandler{
-		audioService:    audioService,
-		subtitleService: subtitleService,
-		storyRepo:       storyRepo,
+		audioService:          audioService,
+		subtitleService:       subtitleService,
+		videoSynthesisService: videoSynthesisService,
+		storyRepo:             storyRepo,
 	}
 }
 
@@ -157,4 +164,81 @@ func (h *AudioHandler) GetSubtitles(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"subtitles": subtitles})
+}
+
+// SynthesizeVideoRequest represents the request body for video synthesis
+type SynthesizeVideoRequest struct {
+	StoryID     string `json:"story_id" binding:"required"`
+	VideoURL    string `json:"video_url"`
+	AddAudio    bool   `json:"add_audio"`
+	AddSubtitle bool   `json:"add_subtitle"`
+}
+
+// SynthesizeVideo handles POST /api/v1/audio/synthesis
+func (h *AudioHandler) SynthesizeVideo(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
+	var req SynthesizeVideoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Parse story ID
+	storyID, err := uuid.Parse(req.StoryID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story_id"})
+		return
+	}
+
+	// Verify user owns the story
+	if _, err := h.storyRepo.GetWithRelationsForUser(c.Request.Context(), userID, storyID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
+		return
+	}
+
+	// Create synthesis request
+	synthesisReq := service.SynthesizeVideoRequest{
+		StoryID:     storyID,
+		VideoURL:    req.VideoURL,
+		AddAudio:    req.AddAudio,
+		AddSubtitle: req.AddSubtitle,
+	}
+
+	// Start video synthesis task
+	task, err := h.videoSynthesisService.SynthesizeVideo(c.Request.Context(), synthesisReq)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"task_id": task.ID,
+		"message": "Video synthesis task created",
+	})
+}
+
+// GetSynthesisStatus handles GET /api/v1/videos/synthesis/:task_id
+func (h *AudioHandler) GetSynthesisStatus(c *gin.Context) {
+	taskIDStr := c.Param("task_id")
+	taskID, err := uuid.Parse(taskIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task_id"})
+		return
+	}
+
+	task, err := h.videoSynthesisService.GetTaskStatus(c.Request.Context(), taskID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"task_id":       task.ID,
+		"status":        task.Status,
+		"progress":      task.Progress,
+		"output_url":    task.OutputURL,
+		"error_message": task.ErrorMessage,
+	})
 }

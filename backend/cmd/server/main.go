@@ -117,6 +117,17 @@ func main() {
 	// Initialize subtitle service
 	subtitleService := service.NewSubtitleService(audioRepo, getEnv("SUBTITLE_DIR", "./uploads/subtitles"))
 
+	// Initialize video synthesis service
+	synthesisOutputDir := getEnv("SYNTHESIS_OUTPUT_DIR", "./uploads/synthesis")
+	synthesisBaseURL := getEnv("SYNTHESIS_BASE_URL", "http://localhost:8080/uploads/synthesis")
+	videoSynthesisService := service.NewVideoSynthesisService(
+		audioRepo,
+		storyRepo,
+		subtitleService,
+		synthesisOutputDir,
+		synthesisBaseURL,
+	)
+
 	// Setup router
 	r := router.SetupRouter(
 		jwtService,
@@ -130,6 +141,7 @@ func main() {
 		rateLimitService,
 		audioService,
 		subtitleService,
+		videoSynthesisService,
 	)
 
 	// Start server
