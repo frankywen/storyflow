@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+backend/server
+backend/dist/
+frontend/dist/
+
+# Environment files (contain secrets)
+.env
+.env.local
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploaded files
+uploads/
+*.mp4
+*.webm
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Database
+*.db
+*.sqlite
+
+# Test coverage
+coverage/
+*.cover
