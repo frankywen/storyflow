@@ -21,6 +21,8 @@ func SetupRouter(
 	userRepo *repository.UserRepository,
 	userConfigRepo *repository.UserConfigRepository,
 	rateLimitService *service.RateLimitService,
+	audioService *service.AudioService,
+	subtitleService *service.SubtitleService,
 ) *gin.Engine {
 	r := gin.Default()
 
@@ -51,6 +53,7 @@ func SetupRouter(
 	videoHandler := handler.NewVideoHandler(repo, aiFactory)
 	characterHandler := handler.NewCharacterHandler(repo, aiFactory)
 	adminHandler := handler.NewAdminHandler(userRepo, userConfigRepo, repo)
+	audioHandler := handler.NewAudioHandler(audioService, subtitleService)
 
 	// API routes
 	api := r.Group("/api/v1")
@@ -146,6 +149,16 @@ func SetupRouter(
 				videos.GET("/status/:task_id", videoHandler.GetVideoStatus)
 				videos.POST("/merge", videoHandler.MergeVideos)
 				videos.GET("/view", videoHandler.ViewVideo)
+			}
+
+			// Audio routes
+			audio := protected.Group("/audio")
+			{
+				audio.POST("/generate", audioHandler.GenerateAudio)
+				audio.GET("/status/:task_id", audioHandler.GetTaskStatus)
+				audio.GET("/story/:story_id", audioHandler.GetAudios)
+				audio.POST("/subtitles/:story_id", audioHandler.GenerateSubtitles)
+				audio.GET("/subtitles/:story_id", audioHandler.GetSubtitles)
 			}
 
 			// Export routes
