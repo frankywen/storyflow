@@ -19,6 +19,7 @@ func SetupRouter(
 	repo *repository.StoryRepository,
 	userRepo *repository.UserRepository,
 	userConfigRepo *repository.UserConfigRepository,
+	rateLimitService *service.RateLimitService,
 ) *gin.Engine {
 	r := gin.Default()
 
@@ -55,6 +56,7 @@ func SetupRouter(
 	{
 		// Auth routes (public)
 		auth := api.Group("/auth")
+		auth.Use(middleware.RateLimitByIP(rateLimitService)) // 10次/分钟，已在 service 初始化时设置
 		{
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
