@@ -36,6 +36,12 @@ func NewPostgres(cfg Config) (*gorm.DB, error) {
 
 	// Auto migrate
 	if err := db.AutoMigrate(
+		&model.User{},
+		&model.UserConfig{},
+		&model.RefreshToken{},
+		&model.PasswordResetToken{},
+		&model.EmailVerificationCode{},
+		&model.TokenBlacklist{},
 		&model.Story{},
 		&model.Character{},
 		&model.Scene{},

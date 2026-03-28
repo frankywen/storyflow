@@ -8,32 +8,30 @@ import (
 	"storyflow/internal/agent"
 	"storyflow/internal/model"
 	"storyflow/internal/repository"
-	"storyflow/pkg/ai"
 )
 
 // StoryService handles story-related business logic
 type StoryService struct {
-	repo           *repository.StoryRepository
-	parserAgent    *agent.StoryParserAgent
-	imageGenerator ai.ImageGenerator
+	repo      *repository.StoryRepository
+	aiFactory *AIServiceFactory
 }
 
 // NewStoryService creates a new story service
-func NewStoryService(repo *repository.StoryRepository, llmProvider ai.LLMProvider, imageGenerator ai.ImageGenerator) *StoryService {
+func NewStoryService(repo *repository.StoryRepository, aiFactory *AIServiceFactory) *StoryService {
 	return &StoryService{
-		repo:           repo,
-		parserAgent:    agent.NewStoryParserAgent(llmProvider),
-		imageGenerator: imageGenerator,
+		repo:      repo,
+		aiFactory: aiFactory,
 	}
 }
 
-// CreateStory creates a new story
-func (s *StoryService) CreateStory(ctx context.Context, title, content string) (*model.Story, error) {
+// CreateStory creates a new story for a user
+func (s *StoryService) CreateStory(ctx context.Context, userID uuid.UUID, title, content string) (*model.Story, error) {
 	story := &model.Story{
-		ID:      uuid.New(),
-		Title:   title,
+		ID:     uuid.New(),
+		UserID: userID,
+		Title:  title,
 		Content: content,
-		Status:  "pending",
+		Status: "pending",
 	}
 
 	if err := s.repo.Create(ctx, story); err != nil {
@@ -43,28 +41,28 @@ func (s *StoryService) CreateStory(ctx context.Context, title, content string) (
 	return story, nil
 }
 
-// GetStory retrieves a story by ID
-func (s *StoryService) GetStory(ctx context.Context, id uuid.UUID) (*model.Story, error) {
-	story, err := s.repo.GetByID(ctx, id)
+// GetStory retrieves a story by ID for a user
+func (s *StoryService) GetStory(ctx context.Context, userID, id uuid.UUID) (*model.Story, error) {
+	story, err := s.repo.GetByUserAndID(ctx, userID, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get story: %w", err)
 	}
 	return story, nil
 }
 
-// GetStoryWithRelations retrieves a story with all related data
-func (s *StoryService) GetStoryWithRelations(ctx context.Context, id uuid.UUID) (*model.Story, error) {
-	story, err := s.repo.GetWithRelations(ctx, id)
+// GetStoryWithRelations retrieves a story with all related data for a user
+func (s *StoryService) GetStoryWithRelations(ctx context.Context, userID, id uuid.UUID) (*model.Story, error) {
+	story, err := s.repo.GetWithRelationsForUser(ctx, userID, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get story: %w", err)
 	}
 	return story, nil
 }
 
-// ListStories lists stories with pagination
-func (s *StoryService) ListStories(ctx context.Context, page, pageSize int) ([]model.Story, int64, error) {
+// ListStories lists stories for a user with pagination
+func (s *StoryService) ListStories(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]model.Story, int64, error) {
 	offset := (page - 1) * pageSize
-	stories, total, err := s.repo.List(ctx, offset, pageSize)
+	stories, total, err := s.repo.ListByUser(ctx, userID, offset, pageSize)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list stories: %w", err)
 	}
@@ -72,19 +70,26 @@ func (s *StoryService) ListStories(ctx context.Context, page, pageSize int) ([]m
 }
 
 // ParseStory parses a story and extracts characters and scenes
-func (s *StoryService) ParseStory(ctx context.Context, id uuid.UUID, style string) (*model.Story, error) {
-	// Get the story
-	story, err := s.repo.GetByID(ctx, id)
+func (s *StoryService) ParseStory(ctx context.Context, userID, id uuid.UUID, style string) (*model.Story, error) {
+	// Get the story (verify ownership)
+	story, err := s.repo.GetByUserAndID(ctx, userID, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get story: %w", err)
+		return nil, fmt.Errorf("story not found or access denied")
+	}
+
+	// Get user's LLM provider
+	llmProvider, err := s.aiFactory.GetLLMProvider(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("LLM not configured: %w", err)
 	}
 
 	// Update status
 	story.Status = "parsing"
 	s.repo.Update(ctx, story)
 
-	// Parse the story
-	result, err := s.parserAgent.ParseWithStyle(ctx, story.Content, style)
+	// Parse the story using user's LLM
+	parserAgent := agent.NewStoryParserAgent(llmProvider)
+	result, err := parserAgent.ParseWithStyle(ctx, story.Content, style)
 	if err != nil {
 		story.Status = "error"
 		s.repo.Update(ctx, story)
@@ -154,9 +159,9 @@ func (s *StoryService) ParseStory(ctx context.Context, id uuid.UUID, style strin
 	return story, nil
 }
 
-// DeleteStory deletes a story
-func (s *StoryService) DeleteStory(ctx context.Context, id uuid.UUID) error {
-	if err := s.repo.Delete(ctx, id); err != nil {
+// DeleteStory deletes a story for a user
+func (s *StoryService) DeleteStory(ctx context.Context, userID, id uuid.UUID) error {
+	if err := s.repo.DeleteForUser(ctx, userID, id); err != nil {
 		return fmt.Errorf("failed to delete story: %w", err)
 	}
 	return nil

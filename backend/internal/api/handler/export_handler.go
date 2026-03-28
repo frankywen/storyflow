@@ -6,18 +6,21 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"storyflow/internal/repository"
 	"storyflow/internal/service"
 )
 
 // ExportHandler handles export requests
 type ExportHandler struct {
 	exportService *service.ExportService
+	repo          *repository.StoryRepository
 }
 
 // NewExportHandler creates a new export handler
-func NewExportHandler(exportService *service.ExportService) *ExportHandler {
+func NewExportHandler(exportService *service.ExportService, repo *repository.StoryRepository) *ExportHandler {
 	return &ExportHandler{
 		exportService: exportService,
+		repo:          repo,
 	}
 }
 
@@ -32,6 +35,8 @@ type ExportRequest struct {
 
 // ExportStory handles POST /api/v1/export
 func (h *ExportHandler) ExportStory(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	var req ExportRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -41,6 +46,13 @@ func (h *ExportHandler) ExportStory(c *gin.Context) {
 	storyID, err := uuid.Parse(req.StoryID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story ID"})
+		return
+	}
+
+	// Verify ownership
+	_, err = h.repo.GetByUserAndID(c.Request.Context(), userID, storyID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
 		return
 	}
 

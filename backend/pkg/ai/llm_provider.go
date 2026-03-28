@@ -50,8 +50,10 @@ func NewLLMProvider(cfg LLMConfig) LLMProvider {
 		return NewVolcEngineProvider(cfg)
 	case "alibaba", "qwen", "tongyi":
 		return NewAlibabaProvider(cfg)
+	case "deepseek", "openai", "moonshot", "zhipu":
+		return NewOpenAICompatibleProvider(cfg, cfg.Provider)
 	default:
-		// Default to Claude
-		return NewClaudeProvider(cfg)
+		// Try OpenAI-compatible as fallback for unknown providers
+		return NewOpenAICompatibleProvider(cfg, cfg.Provider)
 	}
 }

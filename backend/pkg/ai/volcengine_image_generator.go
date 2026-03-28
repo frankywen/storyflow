@@ -25,7 +25,7 @@ func NewVolcEngineImageGenerator(cfg ImageGeneratorConfig) *VolcEngineImageGener
 		cfg.Model = "doubao-seedream-3-0-t2i-250415"
 	}
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://ark.cn-beijing.volces.com/api/v3"
+		cfg.BaseURL = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
 	}
 	timeout := 5 * time.Minute
 	if cfg.Timeout > 0 {
@@ -94,7 +94,7 @@ func (g *VolcEngineImageGenerator) Generate(ctx context.Context, req *ImageReque
 	// Build size string
 	size := fmt.Sprintf("%dx%d", req.Width, req.Height)
 
-	// Build request - OpenAI-compatible format
+	// Build request - OpenAI-compatible format for /images/generations endpoint
 	imgReq := volcengineImgRequest{
 		Model:  g.model,
 		Prompt: stylePrompt,
@@ -107,7 +107,10 @@ func (g *VolcEngineImageGenerator) Generate(ctx context.Context, req *ImageReque
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", g.baseURL+"/images/generations", bytes.NewReader(body))
+	// Use base URL directly (should be https://ark.cn-beijing.volces.com/api/v3/images/generations)
+	fmt.Printf("VolcEngine Image Request: endpoint=%s, body=%s\n", g.baseURL, string(body))
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", g.baseURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -126,10 +129,13 @@ func (g *VolcEngineImageGenerator) Generate(ctx context.Context, req *ImageReque
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
+	fmt.Printf("VolcEngine Image Response: status=%d, body=%s\n", resp.StatusCode, string(respBody)[:min(500, len(respBody))])
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
+	// Parse response - OpenAI-compatible format
 	var result volcengineImgResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)

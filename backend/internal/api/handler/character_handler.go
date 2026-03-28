@@ -17,18 +17,18 @@ import (
 
 // CharacterHandler handles character-related HTTP requests
 type CharacterHandler struct {
-	consistencyService *service.CharacterConsistencyService
-	repo               *repository.StoryRepository
+	repo      *repository.StoryRepository
+	aiFactory *service.AIServiceFactory
 }
 
 // NewCharacterHandler creates a new character handler
 func NewCharacterHandler(
-	consistencyService *service.CharacterConsistencyService,
 	repo *repository.StoryRepository,
+	aiFactory *service.AIServiceFactory,
 ) *CharacterHandler {
 	return &CharacterHandler{
-		consistencyService: consistencyService,
-		repo:               repo,
+		repo:      repo,
+		aiFactory: aiFactory,
 	}
 }
 
@@ -39,6 +39,8 @@ type RegenerateReferenceRequest struct {
 
 // UploadReferenceImage handles POST /api/v1/characters/:id/reference
 func (h *CharacterHandler) UploadReferenceImage(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid character ID"})
@@ -49,6 +51,13 @@ func (h *CharacterHandler) UploadReferenceImage(c *gin.Context) {
 	character, err := h.repo.GetCharacterByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "character not found"})
+		return
+	}
+
+	// Verify ownership: check if the story belongs to the user
+	_, err = h.repo.GetByUserAndID(c.Request.Context(), userID, character.StoryID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "character not found or access denied"})
 		return
 	}
 
@@ -76,10 +85,10 @@ func (h *CharacterHandler) UploadReferenceImage(c *gin.Context) {
 
 	// Generate unique filename
 	filename := fmt.Sprintf("%s_%d%s", id.String(), time.Now().Unix(), ext)
-	filepath := filepath.Join(uploadDir, filename)
+	filePath := filepath.Join(uploadDir, filename)
 
 	// Create destination file
-	dst, err := os.Create(filepath)
+	dst, err := os.Create(filePath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create file"})
 		return
@@ -112,6 +121,8 @@ func (h *CharacterHandler) UploadReferenceImage(c *gin.Context) {
 
 // DeleteReferenceImage handles DELETE /api/v1/characters/:id/reference
 func (h *CharacterHandler) DeleteReferenceImage(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid character ID"})
@@ -125,10 +136,17 @@ func (h *CharacterHandler) DeleteReferenceImage(c *gin.Context) {
 		return
 	}
 
+	// Verify ownership: check if the story belongs to the user
+	_, err = h.repo.GetByUserAndID(c.Request.Context(), userID, character.StoryID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "character not found or access denied"})
+		return
+	}
+
 	// Delete file if exists
 	if character.ReferenceImageID != "" {
-		filepath := filepath.Join("uploads/references", character.ReferenceImageID)
-		os.Remove(filepath) // Ignore error if file doesn't exist
+		filePath := filepath.Join("uploads/references", character.ReferenceImageID)
+		os.Remove(filePath) // Ignore error if file doesn't exist
 	}
 
 	// Clear reference image
@@ -148,6 +166,8 @@ func (h *CharacterHandler) DeleteReferenceImage(c *gin.Context) {
 
 // RegenerateReferenceImage handles POST /api/v1/characters/:id/regenerate
 func (h *CharacterHandler) RegenerateReferenceImage(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid character ID"})
@@ -161,14 +181,31 @@ func (h *CharacterHandler) RegenerateReferenceImage(c *gin.Context) {
 		return
 	}
 
+	// Verify ownership: check if the story belongs to the user
+	_, err = h.repo.GetByUserAndID(c.Request.Context(), userID, character.StoryID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "character not found or access denied"})
+		return
+	}
+
 	// Parse request
 	var req RegenerateReferenceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req.Style = "manga" // default style
 	}
 
+	// Get user's image generator
+	imageGenerator, err := h.aiFactory.GetImageGenerator(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Image generator not configured"})
+		return
+	}
+
+	// Create consistency service with user's image generator
+	consistencyService := service.NewCharacterConsistencyService(imageGenerator, h.repo)
+
 	// Generate reference image
-	updatedChar, err := h.consistencyService.GenerateReferenceImage(
+	updatedChar, err := consistencyService.GenerateReferenceImage(
 		c.Request.Context(),
 		character,
 		req.Style,
@@ -203,14 +240,16 @@ type GenerateAllReferencesRequest struct {
 
 // GenerateAllReferenceImages handles POST /api/v1/stories/:id/generate-references
 func (h *CharacterHandler) GenerateAllReferenceImages(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid story ID"})
 		return
 	}
 
-	// Check story exists and is parsed
-	story, err := h.repo.GetByID(c.Request.Context(), id)
+	// Check story exists and is parsed (verify ownership)
+	story, err := h.repo.GetByUserAndID(c.Request.Context(), userID, id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "story not found"})
 		return
@@ -230,8 +269,18 @@ func (h *CharacterHandler) GenerateAllReferenceImages(c *gin.Context) {
 		req.Style = "manga" // default style
 	}
 
+	// Get user's image generator
+	imageGenerator, err := h.aiFactory.GetImageGenerator(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Image generator not configured"})
+		return
+	}
+
+	// Create consistency service with user's image generator
+	consistencyService := service.NewCharacterConsistencyService(imageGenerator, h.repo)
+
 	// Generate all reference images
-	updatedChars, err := h.consistencyService.GenerateAllReferenceImages(
+	updatedChars, err := consistencyService.GenerateAllReferenceImages(
 		c.Request.Context(),
 		id,
 		req.Style,
