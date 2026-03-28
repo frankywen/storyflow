@@ -319,3 +319,33 @@ func (r *UserRepository) CleanupExpiredCodes(ctx context.Context) error {
 		Where("expires_at < ?", time.Now()).
 		Delete(&model.EmailVerificationCode{}).Error
 }
+
+// AddTokenToBlacklist adds a token to the blacklist
+func (r *UserRepository) AddTokenToBlacklist(ctx context.Context, jti string, userID uuid.UUID, expiresAt time.Time) error {
+	blacklist := &model.TokenBlacklist{
+		TokenJti:  jti,
+		UserID:    userID,
+		ExpiresAt: expiresAt,
+	}
+	return r.db.WithContext(ctx).Create(blacklist).Error
+}
+
+// IsTokenBlacklisted checks if a token is in the blacklist
+func (r *UserRepository) IsTokenBlacklisted(ctx context.Context, jti string) bool {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&model.TokenBlacklist{}).
+		Where("token_jti = ? AND expires_at > ?", jti, time.Now()).
+		Count(&count).Error; err != nil {
+		// On error, fail-closed for security
+		return true
+	}
+	return count > 0
+}
+
+// CleanupExpiredBlacklist cleans up expired blacklist entries
+func (r *UserRepository) CleanupExpiredBlacklist(ctx context.Context) error {
+	return r.db.WithContext(ctx).
+		Where("expires_at < ?", time.Now()).
+		Delete(&model.TokenBlacklist{}).Error
+}
