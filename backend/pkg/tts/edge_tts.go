@@ -49,8 +49,9 @@ func (p *EdgeTTSProvider) GetName() string {
 }
 
 func (p *EdgeTTSProvider) GenerateVoice(ctx context.Context, text string, voiceID string, params VoiceParams) (*AudioResult, error) {
-	// 生成唯一文件名
-	filename := fmt.Sprintf("%d_%s.mp3", time.Now().UnixNano(), voiceID)
+	// 生成唯一文件名，使用filepath.Base防止路径遍历
+	safeVoiceID := filepath.Base(voiceID)
+	filename := fmt.Sprintf("%d_%s.mp3", time.Now().UnixNano(), safeVoiceID)
 	outputPath := filepath.Join(p.outputDir, filename)
 
 	// 确保输出目录存在
@@ -113,7 +114,10 @@ func (p *EdgeTTSProvider) GetAvailableVoices(ctx context.Context) ([]Voice, erro
 
 // getAudioDuration 使用ffprobe获取音频时长
 func (p *EdgeTTSProvider) getAudioDuration(filePath string) (float64, error) {
-	cmd := exec.Command("ffprobe",
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "ffprobe",
 		"-i", filePath,
 		"-show_entries", "format=duration",
 		"-v", "quiet",
@@ -122,6 +126,9 @@ func (p *EdgeTTSProvider) getAudioDuration(filePath string) (float64, error) {
 
 	output, err := cmd.Output()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return 0, fmt.Errorf("ffprobe timeout")
+		}
 		return 0, err
 	}
 
