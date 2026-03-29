@@ -1,6 +1,6 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom'
-import { FileText, Image, Settings, Trash2, RefreshCw, Download, Video, Upload, User, Film, LogOut, Shield, Edit3, Save, X, Volume2 } from 'lucide-react'
+import { FileText, Image, Settings, Trash2, RefreshCw, Download, Video, Upload, User, Film, LogOut, Shield, Edit3, Save, X, Volume2, Subtitles } from 'lucide-react'
 
 // Auth
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -14,10 +14,10 @@ import AdminPage from './pages/AdminPage'
 import AudioConfigPage from './pages/AudioConfigPage'
 
 // API
-import { storyApi, imageApi, exportApi, videoApi, characterApi } from './services/api'
+import { storyApi, imageApi, exportApi, videoApi, characterApi, audioApi } from './services/api'
 
 // Types
-import { Story, Character } from './types'
+import { Story, Character, AudioFile, Subtitle } from './types'
 
 // Pages
 const HomePage = () => (
@@ -298,6 +298,12 @@ const StoryDetailPage = () => {
   const [editContent, setEditContent] = React.useState('')
   const [saving, setSaving] = React.useState(false)
 
+  // 场景测试状态
+  const [sceneAudios, setSceneAudios] = React.useState<Record<string, AudioFile[]>>({})
+  const [sceneSubtitles, setSceneSubtitles] = React.useState<Record<string, Subtitle[]>>({})
+  const [generatingScene, setGeneratingScene] = React.useState<string | null>(null)
+  const [generatingType, setGeneratingType] = React.useState<'audio' | 'subtitle' | 'video' | null>(null)
+
   React.useEffect(() => {
     loadStory()
   }, [id])
@@ -513,6 +519,52 @@ const StoryDetailPage = () => {
       loadStory() // Refresh
     } catch (err) {
       alert('上传参考图失败')
+    }
+  }
+
+  // 场景测试处理函数
+  const handleGenerateSceneAudio = async (sceneId: string) => {
+    setGeneratingScene(sceneId)
+    setGeneratingType('audio')
+    try {
+      const res = await audioApi.generateSceneAudio(sceneId)
+      setSceneAudios(prev => ({ ...prev, [sceneId]: res.data.audios }))
+      alert(`成功生成 ${res.data.audios.length} 个音频文件`)
+    } catch (err: any) {
+      alert(err.response?.data?.error || '生成配音失败')
+    } finally {
+      setGeneratingScene(null)
+      setGeneratingType(null)
+    }
+  }
+
+  const handleGenerateSceneSubtitle = async (sceneId: string) => {
+    setGeneratingScene(sceneId)
+    setGeneratingType('subtitle')
+    try {
+      const res = await audioApi.generateSceneSubtitles(sceneId)
+      setSceneSubtitles(prev => ({ ...prev, [sceneId]: res.data.subtitles }))
+      alert(`成功生成 ${res.data.subtitles.length} 个字幕`)
+    } catch (err: any) {
+      alert(err.response?.data?.error || '生成字幕失败')
+    } finally {
+      setGeneratingScene(null)
+      setGeneratingType(null)
+    }
+  }
+
+  const handleGenerateSceneVideo = async (sceneId: string) => {
+    setGeneratingScene(sceneId)
+    setGeneratingType('video')
+    try {
+      const res = await videoApi.generate(id, sceneId, { duration: 5, motion_level: 'medium' })
+      alert(`视频生成任务已启动，任务ID: ${res.data.task_id}`)
+      pollForVideos()
+    } catch (err: any) {
+      alert(err.response?.data?.error || '生成视频失败')
+    } finally {
+      setGeneratingScene(null)
+      setGeneratingType(null)
     }
   }
 
@@ -763,6 +815,70 @@ const StoryDetailPage = () => {
                             >
                               您的浏览器不支持视频播放
                             </video>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 场景测试面板 */}
+                    {scene.image_url && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">场景测试</h4>
+                        <div className="flex gap-2 flex-wrap mb-3">
+                          {!scene.video_url && (
+                            <button
+                              onClick={() => handleGenerateSceneVideo(scene.id)}
+                              disabled={generatingScene === scene.id && generatingType === 'video'}
+                              className="px-3 py-1.5 text-sm bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-400 flex items-center gap-1"
+                            >
+                              <Video className="w-3 h-3" />
+                              {generatingScene === scene.id && generatingType === 'video' ? '生成中...' : '生成视频'}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleGenerateSceneAudio(scene.id)}
+                            disabled={generatingScene === scene.id}
+                            className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 flex items-center gap-1"
+                          >
+                            <Volume2 className="w-3 h-3" />
+                            {generatingScene === scene.id && generatingType === 'audio' ? '生成中...' : '生成配音'}
+                          </button>
+                          <button
+                            onClick={() => handleGenerateSceneSubtitle(scene.id)}
+                            disabled={generatingScene === scene.id}
+                            className="px-3 py-1.5 text-sm bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 flex items-center gap-1"
+                          >
+                            <Subtitles className="w-3 h-3" />
+                            {generatingScene === scene.id && generatingType === 'subtitle' ? '生成中...' : '生成字幕'}
+                          </button>
+                        </div>
+
+                        {/* 测试结果预览 */}
+                        {sceneAudios[scene.id] && sceneAudios[scene.id].length > 0 && (
+                          <div className="bg-gray-50 rounded p-2 mt-2">
+                            <p className="text-xs text-gray-600 mb-2">配音预览:</p>
+                            {sceneAudios[scene.id].map((audio, idx) => (
+                              <div key={audio.id || idx} className="flex items-center gap-2 mb-1">
+                                <span className="text-xs text-gray-500">
+                                  {audio.audio_type === 'dialogue' ? '对话' : '旁白'}
+                                </span>
+                                <audio controls src={audio.audio_url} className="h-6 w-40" />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {sceneSubtitles[scene.id] && sceneSubtitles[scene.id].length > 0 && (
+                          <div className="bg-gray-50 rounded p-2 mt-2">
+                            <p className="text-xs text-gray-600 mb-2">字幕预览:</p>
+                            {sceneSubtitles[scene.id].map((subtitle, idx) => (
+                              <div key={subtitle.id || idx} className="mb-1">
+                                <span className="text-xs text-gray-500">
+                                  [{subtitle.start_time.toFixed(1)}s - {subtitle.end_time.toFixed(1)}s]
+                                </span>
+                                <span className="text-xs text-gray-700 ml-2">{subtitle.text}</span>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>

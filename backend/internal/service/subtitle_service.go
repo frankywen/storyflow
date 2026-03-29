@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,12 +16,14 @@ import (
 
 type SubtitleService struct {
 	audioRepo   *repository.AudioRepository
+	storyRepo   *repository.StoryRepository
 	subtitleDir string
 }
 
-func NewSubtitleService(audioRepo *repository.AudioRepository, subtitleDir string) *SubtitleService {
+func NewSubtitleService(audioRepo *repository.AudioRepository, storyRepo *repository.StoryRepository, subtitleDir string) *SubtitleService {
 	return &SubtitleService{
 		audioRepo:   audioRepo,
+		storyRepo:   storyRepo,
 		subtitleDir: subtitleDir,
 	}
 }
@@ -121,4 +124,50 @@ func formatSRTTime(seconds float64) string {
 	secs := int(seconds) % 60
 	millis := int((seconds - float64(int(seconds))) * 1000)
 	return fmt.Sprintf("%02d:%02d:%02d,%03d", hours, minutes, secs, millis)
+}
+
+// GenerateSubtitlesForScene generates subtitles for a single scene
+func (s *SubtitleService) GenerateSubtitlesForScene(ctx context.Context, sceneID uuid.UUID) ([]model.Subtitle, error) {
+	// Get scene
+	scene, err := s.storyRepo.GetScene(ctx, sceneID)
+	if err != nil {
+		return nil, fmt.Errorf("scene not found: %w", err)
+	}
+
+	// Get audio files for this scene
+	audios, err := s.audioRepo.GetAudiosByScene(ctx, sceneID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get audio files: %w", err)
+	}
+
+	if len(audios) == 0 {
+		return nil, errors.New("no audio files found for this scene")
+	}
+
+	var subtitles []model.Subtitle
+	currentTime := 0.0
+
+	for _, audio := range audios {
+		subtitle := model.Subtitle{
+			StoryID:      scene.StoryID,
+			SceneID:      sceneID,
+			SubtitleType: audio.AudioType,
+			Text:         audio.TextContent,
+			StartTime:    currentTime,
+			EndTime:      currentTime + audio.Duration,
+		}
+
+		if audio.CharacterID != uuid.Nil {
+			subtitle.CharacterID = audio.CharacterID
+		}
+
+		if err := s.audioRepo.CreateSubtitle(ctx, &subtitle); err != nil {
+			return nil, fmt.Errorf("failed to save subtitle: %w", err)
+		}
+
+		subtitles = append(subtitles, subtitle)
+		currentTime += audio.Duration
+	}
+
+	return subtitles, nil
 }

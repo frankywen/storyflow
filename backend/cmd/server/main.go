@@ -115,7 +115,7 @@ func main() {
 	)
 
 	// Initialize subtitle service
-	subtitleService := service.NewSubtitleService(audioRepo, getEnv("SUBTITLE_DIR", "./uploads/subtitles"))
+	subtitleService := service.NewSubtitleService(audioRepo, storyRepo, getEnv("SUBTITLE_DIR", "./uploads/subtitles"))
 
 	// Initialize video synthesis service
 	synthesisOutputDir := getEnv("SYNTHESIS_OUTPUT_DIR", "./uploads/synthesis")

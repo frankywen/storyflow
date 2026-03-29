@@ -88,3 +88,23 @@ export interface ParseResult {
   scenes: Scene[]
   questions?: string[]
 }
+
+export interface AudioFile {
+  id: string
+  scene_id: string
+  audio_type: 'dialogue' | 'narration'
+  audio_url: string
+  duration?: number
+  character_id?: string
+  created_at: string
+}
+
+export interface Subtitle {
+  id: string
+  scene_id: string
+  text: string
+  start_time: number
+  end_time: number
+  character_id?: string
+  created_at: string
+}

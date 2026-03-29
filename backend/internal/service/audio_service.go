@@ -195,3 +195,65 @@ func (s *AudioService) GetTaskStatus(ctx context.Context, taskID uuid.UUID) (*mo
 func (s *AudioService) GetAudiosByStory(ctx context.Context, storyID uuid.UUID) ([]model.AudioFile, error) {
 	return s.audioRepo.GetAudiosByStory(ctx, storyID)
 }
+
+// GenerateAudioForScene generates audio for a single scene
+func (s *AudioService) GenerateAudioForScene(ctx context.Context, sceneID uuid.UUID, voiceID string) ([]model.AudioFile, error) {
+	// Get scene with story info
+	scene, err := s.storyRepo.GetScene(ctx, sceneID)
+	if err != nil {
+		return nil, fmt.Errorf("scene not found: %w", err)
+	}
+
+	var audios []model.AudioFile
+
+	// Generate audio for dialogue if exists
+	if scene.Dialogue != "" {
+		audio, err := s.generateSingleAudio(ctx, scene.ID, scene.StoryID, "dialogue", scene.Dialogue, voiceID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate dialogue audio: %w", err)
+		}
+		audios = append(audios, *audio)
+	}
+
+	// Generate audio for narration if exists
+	if scene.Narration != "" {
+		audio, err := s.generateSingleAudio(ctx, scene.ID, scene.StoryID, "narration", scene.Narration, voiceID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate narration audio: %w", err)
+		}
+		audios = append(audios, *audio)
+	}
+
+	return audios, nil
+}
+
+// generateSingleAudio generates a single audio file
+func (s *AudioService) generateSingleAudio(ctx context.Context, sceneID, storyID uuid.UUID, audioType, text, voiceID string) (*model.AudioFile, error) {
+	if voiceID == "" {
+		voiceID = "zh-CN-XiaoxiaoNeural" // Default voice
+	}
+
+	// Generate audio using TTS provider
+	result, err := s.ttsProvider.GenerateVoice(ctx, text, voiceID, tts.VoiceParams{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Create audio file record
+	audio := &model.AudioFile{
+		StoryID:     storyID,
+		SceneID:     sceneID,
+		AudioType:   audioType,
+		TextContent: text,
+		AudioURL:    result.AudioURL,
+		Duration:    result.Duration,
+		VoiceID:     voiceID,
+		Status:      "completed",
+	}
+
+	if err := s.audioRepo.CreateAudio(ctx, audio); err != nil {
+		return nil, fmt.Errorf("failed to save audio: %w", err)
+	}
+
+	return audio, nil
+}

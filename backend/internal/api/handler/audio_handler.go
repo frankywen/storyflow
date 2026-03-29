@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -174,6 +175,12 @@ type SynthesizeVideoRequest struct {
 	AddSubtitle bool   `json:"add_subtitle"`
 }
 
+// GenerateSceneAudioRequest represents the request body for scene audio generation
+type GenerateSceneAudioRequest struct {
+	VoiceID   string `json:"voice_id"`
+	Overwrite bool   `json:"overwrite"`
+}
+
 // SynthesizeVideo handles POST /api/v1/audio/synthesis
 func (h *AudioHandler) SynthesizeVideo(c *gin.Context) {
 	userID := c.MustGet("user_id").(uuid.UUID)
@@ -240,5 +247,89 @@ func (h *AudioHandler) GetSynthesisStatus(c *gin.Context) {
 		"progress":      task.Progress,
 		"output_url":    task.OutputURL,
 		"error_message": task.ErrorMessage,
+	})
+}
+
+// GenerateSceneAudio handles POST /api/v1/audio/generate/scene/:scene_id
+func (h *AudioHandler) GenerateSceneAudio(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
+	sceneIDStr := c.Param("scene_id")
+	sceneID, err := uuid.Parse(sceneIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid scene_id"})
+		return
+	}
+
+	var req GenerateSceneAudioRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Request body is optional, use defaults
+		req = GenerateSceneAudioRequest{}
+	}
+
+	// Verify user owns the story containing this scene
+	scene, err := h.storyRepo.GetScene(c.Request.Context(), sceneID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "scene not found"})
+		return
+	}
+
+	_, err = h.storyRepo.GetWithRelationsForUser(c.Request.Context(), userID, scene.StoryID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "scene not found"})
+		return
+	}
+
+	// Generate audio
+	audios, err := h.audioService.GenerateAudioForScene(c.Request.Context(), sceneID, req.VoiceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"scene_id": sceneID,
+		"audios":   audios,
+		"message":  fmt.Sprintf("Generated %d audio files", len(audios)),
+	})
+}
+
+// GenerateSceneSubtitles handles POST /api/v1/audio/subtitles/scene/:scene_id
+func (h *AudioHandler) GenerateSceneSubtitles(c *gin.Context) {
+	userID := c.MustGet("user_id").(uuid.UUID)
+
+	sceneIDStr := c.Param("scene_id")
+	sceneID, err := uuid.Parse(sceneIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid scene_id"})
+		return
+	}
+
+	// Verify user owns the story containing this scene
+	scene, err := h.storyRepo.GetScene(c.Request.Context(), sceneID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "scene not found"})
+		return
+	}
+
+	_, err = h.storyRepo.GetWithRelationsForUser(c.Request.Context(), userID, scene.StoryID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "scene not found"})
+		return
+	}
+
+	// Generate subtitles
+	subtitles, err := h.subtitleService.GenerateSubtitlesForScene(c.Request.Context(), sceneID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":   true,
+		"scene_id":  sceneID,
+		"subtitles": subtitles,
+		"message":   fmt.Sprintf("Generated %d subtitles", len(subtitles)),
 	})
 }

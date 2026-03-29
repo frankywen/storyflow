@@ -156,9 +156,11 @@ func SetupRouter(
 			audio := protected.Group("/audio")
 			{
 				audio.POST("/generate", audioHandler.GenerateAudio)
+				audio.POST("/generate/scene/:scene_id", audioHandler.GenerateSceneAudio)
 				audio.GET("/status/:task_id", audioHandler.GetTaskStatus)
 				audio.GET("/story/:story_id", audioHandler.GetAudios)
 				audio.POST("/subtitles/:story_id", audioHandler.GenerateSubtitles)
+				audio.POST("/subtitles/scene/:scene_id", audioHandler.GenerateSceneSubtitles)
 				audio.GET("/subtitles/:story_id", audioHandler.GetSubtitles)
 				audio.POST("/synthesis", audioHandler.SynthesizeVideo)
 			}

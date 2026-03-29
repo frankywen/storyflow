@@ -303,6 +303,13 @@ export const audioApi = {
   generate: (storyId: string) =>
     api.post<{ success: boolean; task_id: string; message: string }>('/audio/generate', { story_id: storyId }),
 
+  // 新增: 单场景配音生成
+  generateSceneAudio: (sceneId: string, voiceId?: string) =>
+    api.post<{ success: boolean; scene_id: string; audios: AudioFile[]; message: string }>(
+      `/audio/generate/scene/${sceneId}`,
+      { voice_id: voiceId }
+    ),
+
   getStatus: (taskId: string) =>
     api.get<{
       task_id: string
@@ -318,6 +325,12 @@ export const audioApi = {
 
   generateSubtitles: (storyId: string) =>
     api.post<{ success: boolean; message: string }>(`/audio/subtitles/${storyId}`),
+
+  // 新增: 单场景字幕生成
+  generateSceneSubtitles: (sceneId: string) =>
+    api.post<{ success: boolean; scene_id: string; subtitles: Subtitle[]; message: string }>(
+      `/audio/subtitles/scene/${sceneId}`
+    ),
 
   getSubtitles: (storyId: string) =>
     api.get<{ subtitles: Subtitle[] }>(`/audio/subtitles/${storyId}`),
