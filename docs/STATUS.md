@@ -21,6 +21,9 @@
 - [x] 进度追踪
 - [x] 字幕生成（SRT 格式）
 - [x] 视频合成（配音+字幕+视频）
+- [x] 音频间隔时间配置（对话/旁白间隔）🆕
+- [x] 音频淡入淡出效果 🆕
+- [x] 音视频同步策略（静音填充/循环/调速）🆕
 
 #### 前端增强
 - [x] 登录/注册页面
@@ -179,6 +182,19 @@ SUBTITLE_DIR=./uploads/subtitles
 SYNTHESIS_OUTPUT_DIR=./uploads/synthesis
 SYNTHESIS_BASE_URL=http://localhost:8080/uploads/synthesis
 
+# 音频间隔时间配置 (v0.3 新增)
+AUDIO_GAP_BETWEEN_DIALOGUES=0.3    # 对话间隔(秒)
+AUDIO_GAP_BEFORE_NARRATION=0.5     # 旁白前间隔(秒)
+AUDIO_GAP_AFTER_NARRATION=0.3      # 旁白后间隔(秒)
+AUDIO_GAP_BETWEEN_CHARACTERS=0.5   # 不同角色对话间隔(秒)
+
+# 音频淡入淡出效果配置 (v0.3 新增)
+AUDIO_FADE_IN_DURATION=0.3         # 淡入时长(秒)
+AUDIO_FADE_OUT_DURATION=0.3        # 淡出时长(秒)
+
+# 音视频同步策略配置 (v0.3 新增)
+AUDIO_SYNC_MODE=silence            # 同步模式: silence(静音填充)/loop(循环)/speed(调速)
+
 # 服务端口
 PORT=8080
 ```
@@ -227,5 +243,10 @@ cd frontend && npm run dev
 
 - [ ] 角色一致性外观优化
 - [ ] 更多 TTS Provider 支持（火山引擎、阿里云等）
-- [ ] 视频配音时长同步优化
 - [ ] 字幕样式自定义
+- [ ] 字幕换行规则优化（10.6）
+- [ ] 缓存失效策略细化（10.7）
+- [ ] 多设备并发操作（10.8）
+- [ ] 错误提示文案优化（10.9）
+- [ ] TTS重试策略细化（10.10）
+- [ ] 并发参数调优（10.4）
